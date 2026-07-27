@@ -3,4 +3,3 @@ edge-tts
 pydub
 python-docx
 pypdf
-pyaudioop
