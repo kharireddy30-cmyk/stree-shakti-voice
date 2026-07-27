@@ -1,9 +1,11 @@
 import streamlit as st
 import edge_tts
+from pydub import AudioSegment
 import asyncio
 import io
 import uuid
 import re
+import os
 import docx
 from pypdf import PdfReader
 
@@ -29,7 +31,7 @@ if "rename_id" not in st.session_state:
 
 
 # ==========================================
-# 2. హెల్పర్ ఫంక్షన్స్ (Core TTS Engine)
+# 2. హెల్పర్ ఫంక్షన్స్ (Core TTS & File Logic)
 # ==========================================
 
 # Edge-TTS Async Chunk Generator
@@ -43,7 +45,7 @@ async def generate_voice_chunk(text, voice, pitch_val, rate_val):
 
 
 # Auto-Chunking Logic (Smart Text Splitter)
-def split_text_into_chunks(text, max_chars=400):
+def split_text_into_chunks(text, max_chars=350):
     sentences = re.split(r'(?<=[.!?\n।])\s+', text)
     chunks = []
     current_chunk = ""
@@ -144,8 +146,8 @@ with st.sidebar:
 # ==========================================
 # 4. ప్రధాన స్క్రీన్
 # ==========================================
-st.header("🌺 స్త్రీ శక్తి - వాయిస్ ఆడియో కన్వర్టర్")
-st.caption("మీ టెక్స్ట్ మరియు ఫైల్స్‌ను ఆకర్షణీయమైన స్పష్టమైన వాయిస్‌తో MP3 ఆడియోగా మార్చుకోండి.")
+st.header("🌺 స్త్రీ శక్తి - ఆడియో వాయిస్ కన్వర్టర్")
+st.caption("మీ టెక్స్ట్ మరియు ఫైల్స్‌ను ఆకర్షణీయమైన వాయిస్, విరామం (Pause), పిచ్ మరియు BGM తో MP3 ఆడియోగా మార్చుకోండి.")
 
 current_chat = st.session_state.chat_history[st.session_state.current_chat_id]
 msg_to_delete = None
@@ -156,7 +158,9 @@ for idx, m in enumerate(current_chat["messages"]):
         st.caption(
             f"🌐 భాష: {m.get('lang_name', 'తెలుగు')} | "
             f"🎙️ వాయిస్: {m.get('voice_name', 'తెలుగు')} | "
-            f"🔊 వేగం: {m.get('speed', 1.0)}x"
+            f"🎵 BGM: {m.get('bgm_status', 'No')} | "
+            f"🔊 వేగం: {m.get('speed', 1.0)}x | "
+            f"⏸️ విరామం: {m.get('pause_sec', 0.5)}s"
         )
         
         if "audio" in m and m["audio"] is not None:
@@ -182,7 +186,7 @@ if msg_to_delete is not None:
 
 
 # ==========================================
-# 5. ఇన్‌పుట్ & ఫైల్ అప్‌లోడ్
+# 5. ఇన్‌పుట్, ఫైల్ అప్‌లోడ్ & కంట్రోల్స్
 # ==========================================
 st.divider()
 
@@ -246,13 +250,28 @@ with col_speed:
         value=0.85
     )
 
-col_pitch, _ = st.columns([0.5, 0.5])
+st.markdown("##### ⚙️ అడ్వాన్స్డ్ ఆడియో సెట్టింగ్స్")
+col_pause, col_pitch, col_bgm_box = st.columns([0.33, 0.33, 0.34])
+
+with col_pause:
+    pause_duration = st.slider(
+        "⏸️ వాక్యాల మధ్య విరామం (Pause Sec):",
+        min_value=0.3,
+        max_value=2.0,
+        value=0.6,
+        step=0.1
+    )
+
 with col_pitch:
     pitch_custom = st.select_slider(
         "🎚️ వాయిస్ పిచ్ (Pitch Base):",
         options=["సాధారణ (Normal)", "గంభీరం (Deep Base)", "అత్యంత గంభీరం (Heavy Base)"],
         value="సాధారణ (Normal)"
     )
+
+with col_bgm_box:
+    enable_bgm = st.checkbox("🎶 BGM (బ్యాక్‌గ్రౌండ్ మ్యూజిక్) జోడించు", value=True)
+    bgm_volume = st.slider("🎵 BGM శబ్దం (Volume %):", min_value=2, max_value=20, value=6)
 
 
 # ==========================================
@@ -262,7 +281,7 @@ convert_btn = st.button("🔊 స్త్రీ శక్తి ఆడియో
 
 if convert_btn:
     if user_text.strip():
-        with st.spinner("ఆడియో ప్రాసెస్ అవుతోంది... దయచేసి వేచి ఉండండి..."):
+        with st.spinner("టెక్స్ట్‌ని ప్రాసెస్ చేసి, BGM మరియు కంట్రోల్స్‌తో ఆడియో క్రియేట్ చేస్తోంది..."):
             try:
                 clean_txt = user_text.replace("*", "").replace("#", "")
                 
@@ -285,20 +304,47 @@ if convert_btn:
                 }
                 pitch_str = pitch_val_map[pitch_custom]
 
-                text_chunks = split_text_into_chunks(clean_txt, max_chars=400)
+                text_chunks = split_text_into_chunks(clean_txt, max_chars=350)
                 
-                combined_audio = b""
+                speech_sound = AudioSegment.empty()
+                silence_pause = AudioSegment.silent(duration=int(pause_duration * 1000))
 
                 for chunk in text_chunks:
                     raw_audio = asyncio.run(generate_voice_chunk(chunk, selected_voice_code, pitch_str, rate_str))
-                    combined_audio += raw_audio
+                    chunk_sound = AudioSegment.from_file(io.BytesIO(raw_audio), format="mp3")
+                    speech_sound += chunk_sound + silence_pause
+
+                final_sound = speech_sound
+                bgm_status = "No"
+
+                if enable_bgm and os.path.exists("bgm.mp3"):
+                    try:
+                        bgm_sound = AudioSegment.from_file("bgm.mp3")
+                        if len(bgm_sound) < len(speech_sound):
+                            loops_required = (len(speech_sound) // len(bgm_sound)) + 1
+                            bgm_sound = bgm_sound * loops_required
+                        
+                        bgm_sound = bgm_sound[:len(speech_sound) + 1000]
+                        reduction_db = 22 - (bgm_volume * 1.5)
+                        bgm_sound = bgm_sound - reduction_db
+                        final_sound = speech_sound.overlay(bgm_sound)
+                        bgm_status = f"Yes ({bgm_volume}%)"
+                    except Exception as bgm_err:
+                        st.warning(f"BGM మిక్సింగ్ లో సమస్య: {bgm_err}")
+
+                final_fp = io.BytesIO()
+                final_sound.export(final_fp, format="mp3")
+                final_fp.seek(0)
+                audio_bytes = final_fp.getvalue()
 
                 current_chat["messages"].append({
                     "text": user_text,
-                    "audio": combined_audio,
+                    "audio": audio_bytes,
                     "speed": audio_speed,
                     "voice_name": voice_label,
-                    "lang_name": lang_label
+                    "lang_name": lang_label,
+                    "pause_sec": pause_duration,
+                    "bgm_status": bgm_status
                 })
 
                 if len(current_chat["messages"]) == 1 or current_chat["title"] == "కొత్త ఆడియో నోట్":
