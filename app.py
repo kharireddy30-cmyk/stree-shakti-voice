@@ -1,4 +1,13 @@
 import streamlit as st
+
+# --- Python 3.13+ Compatibility Fix for pydub ---
+try:
+    import audioop
+except ImportError:
+    import pyaudioop as audioop
+    import sys
+    sys.modules["audioop"] = audioop
+
 import edge_tts
 from pydub import AudioSegment
 import asyncio
