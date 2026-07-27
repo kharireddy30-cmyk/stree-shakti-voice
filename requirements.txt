@@ -1,5 +1,12 @@
 streamlit
-edge-tts
+google-generativeai
+gTTS
+streamlit-mic-recorder
+supabase
+requests
+openai
+groq
 pydub
+edge-tts
 python-docx
 pypdf
