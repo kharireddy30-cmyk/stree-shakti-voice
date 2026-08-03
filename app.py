@@ -21,9 +21,9 @@ st.set_page_config(
 )
 
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("అనువాదం, ఫైల్ ప్రొటెక్షన్, లైవ్ మైక్రోఫోన్ & ఆడియో కన్వర్షన్ - పర్ఫెక్ట్ వెర్షన్")
+st.caption("అనువాదం, ఫైల్ ప్రొటెక్షన్, లైవ్ మైక్రోఫోన్ & ఆడియో కన్వర్షన్ - పర్ఫెక్ట్ కనెక్షన్")
 
-# సెషన్ స్టేట్స్ (సురక్షితమైన డేటా సేవింగ్ కోసం)
+# సెషన్ స్టేట్స్
 if "main_text" not in st.session_state:
     st.session_state.main_text = ""
 if "translated_text" not in st.session_state:
@@ -38,12 +38,11 @@ if "last_mic_text" not in st.session_state:
 # 2. కోర్ హెల్పర్ ఫంక్షన్లు
 # ==========================================
 
-# A. Edge-TTS ఫైల్ రూపంలో ఆడియో జనరేషన్
 async def generate_voice_file(text, voice, output_filename):
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_filename)
 
-# B. టెక్స్ట్ చంకింగ్ (300 క్యారెక్టర్ల చొప్పున)
+
 def split_text_into_chunks(text, max_chars=300):
     clean_text = re.sub(r'\s+', ' ', text).strip()
     sentences = re.split(r'(?<=[.!?\n।])\s+', clean_text)
@@ -60,7 +59,7 @@ def split_text_into_chunks(text, max_chars=300):
         chunks.append(current_chunk.strip())
     return [c.strip() for c in chunks if len(c.strip()) > 1]
 
-# C. సేఫ్ ట్రాన్స్‌లేషన్ (ఎర్రర్ రాకుండా చంకింగ్)
+
 def safe_translate_text(text, target_lang_code):
     if not text or not text.strip():
         return ""
@@ -95,7 +94,7 @@ def safe_translate_text(text, target_lang_code):
 
     return "\n".join(translated_paras)
 
-# D. ఫైల్స్ నుండి టెక్స్ట్ ఎక్స్‌ట్రాక్షన్
+
 def extract_text_from_file(uploaded_file):
     extracted = ""
     if uploaded_file.name.endswith(".docx"):
@@ -109,7 +108,7 @@ def extract_text_from_file(uploaded_file):
         extracted = uploaded_file.read().decode("utf-8")
     return extracted
 
-# E. వర్డ్ ఫైల్ (.docx) ఫోటోలు పాడవకుండా అనువదించడం
+
 def translate_docx_file(uploaded_file, target_lang_code):
     doc = docx.Document(uploaded_file)
     translator = GoogleTranslator(source='auto', target=target_lang_code)
@@ -152,7 +151,6 @@ with col_mic:
     mic_lang = st.selectbox("మాట్లాడే భాష:", options=["తెలుగు (Telugu)", "హిందీ (Hindi)", "ఇంగ్లీష్ (English)"])
     mic_code_map = {"తెలుగు (Telugu)": "te-IN", "హిందీ (Hindi)": "hi-IN", "ఇంగ్లీష్ (English)": "en-IN"}
     
-    # 🎙️ మైక్రోఫోన్ విడ్జెట్
     spoken_result = speech_to_text(
         start_prompt="🎙️ మాట్లాడటం ప్రారంభించండి (Start)",
         stop_prompt="⏹️ ఆపండి (Stop)",
@@ -161,7 +159,6 @@ with col_mic:
         key='perfect_mic_recorder'
     )
     
-    # డూప్లికేట్ కాపీ లూప్ జరగకుండా ఖచ్చితమైన ఫిక్స్
     if spoken_result and spoken_result != st.session_state.last_mic_text:
         st.session_state.main_text += " " + spoken_result
         st.session_state.last_mic_text = spoken_result
@@ -174,7 +171,6 @@ user_input_text = st.text_area(
     height=140
 )
 
-# యూజర్ మ్యాన్యువల్‌గా మార్చినా సేవ్ అవ్వడం
 if user_input_text != st.session_state.main_text:
     st.session_state.main_text = user_input_text
 
@@ -199,12 +195,18 @@ if st.session_state.main_text.strip() or uploaded_file:
                 with st.spinner("అనువాదం జరుగుతోంది..."):
                     t_res = safe_translate_text(st.session_state.main_text, t_code)
                     st.session_state.translated_text = t_res
-                    st.success("✅ అనువాదం పూర్తయింది!")
+                    st.success("✅ అనువాదం పూర్తయింది! క్రింద అనువాదాన్ని చూడవచ్చు.")
             except Exception as tr_err:
                 st.error(f"అనువాదంలో లోపం: {tr_err}")
 
     if st.session_state.translated_text:
         st.text_area("అనువాదం అయిన టెక్స్ట్ (Translated Text):", value=st.session_state.translated_text, height=120)
+        
+        # 🔗 కనెక్షన్ ఫిక్స్: అనువాదమైన టెక్స్ట్‌ను డైరెక్ట్‌గా ఆడియో కోసం ఎంచుకునే బటన్
+        if st.button("🎯 ఈ అనువాదమైన టెక్స్ట్‌నే ఆడియోగా మార్చు (Use Translated Text for Audio)"):
+            st.session_state.main_text = st.session_state.translated_text
+            st.success("✅ అనువాదమైన టెక్స్ట్ ప్రధాన బాక్స్‌లోకి మార్చబడింది!")
+            st.rerun()
 
     if uploaded_file and uploaded_file.name.endswith(".docx"):
         if st.button("📥 ఫోటోలు/సింబల్స్‌తో సహా అనువాద వర్డ్ ఫైల్ (.docx) డౌన్‌లోడ్ చేయి"):
@@ -239,10 +241,16 @@ convert_btn = st.button("🔊 ఆడియో క్రియేట్ చేయ
 
 
 # ==========================================
-# 6. ఆడియో జనరేషన్ & పర్మనెంట్ డిస్‌ప్లే
+# 6. ఆడియో జనరేషన్ (Smart Dynamic Text Connection Logic)
 # ==========================================
 if convert_btn:
-    text_to_process = st.session_state.main_text.strip()
+    # 🔗 స్మార్ట్ చెకింగ్: అనువాదమైన టెక్స్ట్ ఉంటే దాన్ని లేదా సాధారణ టెక్స్ట్‌ని ఎంచుకుంటుంది
+    text_to_process = ""
+    if st.session_state.translated_text.strip():
+        text_to_process = st.session_state.translated_text.strip()
+    else:
+        text_to_process = st.session_state.main_text.strip()
+
     if text_to_process:
         with st.spinner("ఆడియో ప్రాసెస్ అవుతోంది... దయచేసి వేచి ఉండండి..."):
             try:
@@ -286,7 +294,6 @@ if convert_btn:
 
                     final_fp = io.BytesIO()
                     final_sound.export(final_fp, format="mp3")
-                    # 🔒 పర్మనెంట్ సెషన్‌లో ఆడియోని సేవ్ చేయడం
                     st.session_state.audio_bytes_data = final_fp.getvalue()
                     st.success("🎉 ఆడియో విజయవంతంగా సిద్ధమైంది!")
                 else:
@@ -298,7 +305,7 @@ if convert_btn:
     else:
         st.warning("దయచేసి టెక్స్ట్ ఎంటర్ చేయండి లేదా మాట్లాడండి.")
 
-# 📥 స్థిరంగా ఉండే ఆడియో ప్లేయర్ & డౌన్‌లోడ్ బటన్
+# 📥 స్థిరమైన డిస్‌ప్లే
 if st.session_state.audio_bytes_data is not None:
     st.divider()
     st.audio(st.session_state.audio_bytes_data, format="audio/mp3")
