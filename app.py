@@ -31,7 +31,7 @@ if "translated_text_val" not in st.session_state:
 
 
 # ==========================================
-# 2. హెల్పర్ ఫంక్షన్స్ (Translation & TTS)
+# 2. హెల్పర్ ఫంక్షన్స్ (Robust Translation & TTS)
 # ==========================================
 
 async def generate_voice_file(text, voice, output_filename):
@@ -56,24 +56,36 @@ def split_text_into_chunks(text, max_chars=300):
     return [c.strip() for c in chunks if len(c.strip()) > 1]
 
 
-# 5000 క్యారెక్టర్ల లిమిట్ దాటకుండా సురక్షితమైన అనువాద లాజిక్
+# 🛠️ Safe Translation Helper Logic (NoneType Error Fix)
 def safe_translate_text(text, target_lang_code):
     if not text or not text.strip():
         return ""
     
-    # 2000 క్యారెక్టర్ల ముక్కలుగా కట్ చేయడం
     paragraphs = text.split("\n")
     translated_paras = []
     translator = GoogleTranslator(source='auto', target=target_lang_code)
 
     for p in paragraphs:
-        if p.strip():
-            if len(p) > 2000:
-                sub_chunks = split_text_into_chunks(p, max_chars=1500)
-                sub_trans = [translator.translate(sc) for sc in sub_chunks if sc.strip()]
-                translated_paras.append(" ".join(sub_trans))
-            else:
-                translated_paras.append(translator.translate(p))
+        p_clean = p.strip()
+        if p_clean:
+            try:
+                if len(p_clean) > 1500:
+                    sub_chunks = split_text_into_chunks(p_clean, max_chars=1200)
+                    sub_trans = []
+                    for sc in sub_chunks:
+                        if sc.strip():
+                            res = translator.translate(sc)
+                            if res and isinstance(res, str):
+                                sub_trans.append(res)
+                    translated_paras.append(" ".join(sub_trans))
+                else:
+                    res = translator.translate(p_clean)
+                    if res and isinstance(res, str):
+                        translated_paras.append(res)
+                    else:
+                        translated_paras.append(p_clean)
+            except Exception:
+                translated_paras.append(p_clean)
         else:
             translated_paras.append("")
 
@@ -102,9 +114,9 @@ def translate_docx_file(uploaded_file, target_lang_code):
     for p in doc.paragraphs:
         if p.text.strip():
             try:
-                # ప్రతి పారాగ్రాఫ్‌లోని టెక్స్ట్‌ను మాత్రమే మార్చడం (ఇమేజెస్ అలాగే ఉంటాయి)
                 translated_p = translator.translate(p.text)
-                p.text = translated_p
+                if translated_p and isinstance(translated_p, str):
+                    p.text = translated_p
             except Exception:
                 pass
 
@@ -179,7 +191,7 @@ if user_text.strip() or uploaded_file:
     if st.session_state["translated_text_val"]:
         st.text_area("అనువాదం అయిన టెక్స్ట్:", value=st.session_state["translated_text_val"], height=120)
 
-    # 🖼️ ఫైల్‌లో ఉన్న ఫోటోలను అలాగే ఉంచి అనువాద ఫైల్‌ని డౌన్‌లోడ్ చేసే ఆప్షన్ (.docx)
+    # 🖼️ వర్డ్ ఫైల్ డౌన్‌లోడ్
     if uploaded_file and uploaded_file.name.endswith(".docx"):
         if st.button("📥 ఫోటోలు/సింబల్స్‌తో సహా అనువాద వర్డ్ ఫైల్ (.docx) డౌన్‌లోడ్ చేయి"):
             with st.spinner("ఫైల్ డిజైన్ మరియు ఫోటోలు పాడవకుండా అనువదిస్తోంది..."):
