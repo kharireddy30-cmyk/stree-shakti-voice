@@ -31,20 +31,18 @@ if "translated_text_val" not in st.session_state:
 
 
 # ==========================================
-# 2. హెల్పర్ ఫంక్షన్స్
+# 2. హెల్పర్ ఫంక్షన్స్ (Direct File Stream Fix)
 # ==========================================
 
-async def generate_voice_chunk(text, voice):
+async def generate_voice_file(text, voice, output_filename):
     communicate = edge_tts.Communicate(text, voice)
-    audio_data = b""
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_data += chunk["data"]
-    return audio_data
+    await communicate.save(output_filename)
 
 
 def split_text_into_chunks(text, max_chars=300):
-    sentences = re.split(r'(?<=[.!?\n।])\s+', text)
+    # టెక్స్ట్‌ను క్లీన్ చేసి కేవలం వాక్యాలను మాత్రమే తీసుకోవడం
+    clean_text = re.sub(r'\s+', ' ', text).strip()
+    sentences = re.split(r'(?<=[.!?\n।])\s+', clean_text)
     chunks = []
     current_chunk = ""
     for sentence in sentences:
@@ -56,7 +54,7 @@ def split_text_into_chunks(text, max_chars=300):
             current_chunk = sentence + " "
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
-    return [c.strip() for c in chunks if c.strip()]
+    return [c.strip() for c in chunks if len(c.strip()) > 1]
 
 
 def extract_text_from_file(uploaded_file):
@@ -155,11 +153,11 @@ convert_btn = st.button("🔊 ఆడియో క్రియేట్ చేయ
 
 
 # ==========================================
-# 6. ఆడియో జనరేషన్ & LIVE ERROR DEBUGGER
+# 6. ఆడియో జనరేషన్
 # ==========================================
 if convert_btn:
     if user_text.strip():
-        with st.spinner("ఆడియో ప్రాసెస్ అవుతోంది..."):
+        with st.spinner("ఆడియో ప్రాసెస్ అవుతోంది... దయచేసి వేచి ఉండండి..."):
             try:
                 clean_txt = re.sub(r'[*#_~`]', '', user_text.strip())
                 
@@ -175,22 +173,25 @@ if convert_btn:
 
                 text_chunks = split_text_into_chunks(clean_txt, max_chars=300)
                 
-                # లోపాలను ట్రాక్ చేసే కంటైనర్
                 debug_logs = []
                 speech_sound = AudioSegment.empty()
 
                 for i, chunk in enumerate(text_chunks):
+                    temp_file = f"temp_{i}.mp3"
                     try:
-                        raw_audio = asyncio.run(generate_voice_chunk(chunk, selected_voice))
-                        if raw_audio and len(raw_audio) > 0:
-                            chunk_sound = AudioSegment.from_file(io.BytesIO(raw_audio), format="mp3")
+                        # 🛠️ డైరెక్ట్ ఫైల్‌కి సేవ్ చేసి ఆడియో రీడ్ చేసే గ్యారెంటీ లాజిక్
+                        asyncio.run(generate_voice_file(chunk, selected_voice, temp_file))
+                        
+                        if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
+                            chunk_sound = AudioSegment.from_file(temp_file)
                             speech_sound += chunk_sound
+                            os.remove(temp_file) # తాత్కాలిక ఫైల్ ని తొలగించడం
                         else:
-                            debug_logs.append(f"Chunk {i+1}: 0 bytes వచ్చాయి (No Audio Data)")
+                            debug_logs.append(f"Chunk {i+1}: ఫైల్ ఖాళీగా క్రియేట్ అయింది.")
                     except Exception as chunk_ex:
                         debug_logs.append(f"Chunk {i+1} Error: {str(chunk_ex)}")
 
-                # BGM జోడించడం
+                # BGM మిక్సింగ్
                 if len(speech_sound) > 0:
                     final_sound = speech_sound
                     if os.path.exists("bgm.mp3"):
@@ -201,7 +202,7 @@ if convert_btn:
                             bgm_sound = bgm_sound[:len(speech_sound)] - 15
                             final_sound = speech_sound.overlay(bgm_sound)
                         except Exception as bgm_ex:
-                            st.warning(f"BGM లోపం: {bgm_ex}")
+                            st.warning(f"BGM మిక్సింగ్ సమస్య: {bgm_ex}")
 
                     final_fp = io.BytesIO()
                     final_sound.export(final_fp, format="mp3")
@@ -209,15 +210,15 @@ if convert_btn:
 
                     st.success("🎉 ఆడియో విజయవంతంగా సిద్ధమైంది!")
                     st.audio(audio_bytes, format="audio/mp3")
-                    st.download_button("📥 MP3 డౌన్‌లోడ్", data=audio_bytes, file_name="output.mp3", mime="audio/mp3")
+                    st.download_button("📥 MP3 డౌన్‌లోడ్", data=audio_bytes, file_name="spiritual_audio.mp3", mime="audio/mp3")
                 else:
                     st.error("❌ ఆడియో డేటా ఏదీ జనరేట్ కాలేదు!")
-                    st.write("🔍 **లైవ్ డెబగ్ లాగ్స్ (ఎందుకు రాలేదో కారణం):**")
+                    st.write("🔍 **లైవ్ డెబగ్ లాగ్స్:**")
                     for log in debug_logs:
                         st.code(log)
 
             except Exception as e:
-                st.error("❌ ఆడియో సిస్టమ్‌లో తీవ్రమైన లోపం వచ్చింది:")
-                st.code(traceback.format_exc()) # 🚨 అసలు ఎర్రర్ ని స్క్రీన్ పై ప్రింట్ చేస్తుంది
+                st.error("❌ ఆడియో సిస్టమ్‌లో లోపం వచ్చింది:")
+                st.code(traceback.format_exc())
     else:
         st.warning("దయచేసి టెక్స్ట్ ఎంటర్ చేయండి.")
