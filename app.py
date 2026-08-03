@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("అనువాదం, వర్డ్/టెక్స్ట్ ఫైల్ ప్రొటెక్షన్, లైవ్ మైక్రోఫోన్ & వాయిస్ కన్వర్టర్")
+st.caption("వాయిస్ కన్వర్షన్, PDF, Word, Copy & Clear - ఆల్ ఇన్ వన్ సిస్టమ్")
 
 # సెషన్ స్టేట్స్
 if "main_text" not in st.session_state:
@@ -104,23 +104,16 @@ def extract_text_from_file(uploaded_file):
     return extracted
 
 
-def translate_docx_file(uploaded_file, target_lang_code):
-    doc = docx.Document(uploaded_file)
-    translator = GoogleTranslator(source='auto', target=target_lang_code)
-
-    for p in doc.paragraphs:
-        if p.text.strip():
-            try:
-                translated_p = translator.translate(p.text)
-                if translated_p and isinstance(translated_p, str):
-                    p.text = translated_p
-            except Exception:
-                pass
-
-    output_stream = io.BytesIO()
-    doc.save(output_stream)
-    output_stream.seek(0)
-    return output_stream.getvalue()
+# DOCX క్రియేటర్
+def create_docx_bytes(text):
+    doc = docx.Document()
+    for paragraph in text.split("\n"):
+        if paragraph.strip():
+            doc.add_paragraph(paragraph.strip())
+    output = io.BytesIO()
+    doc.save(output)
+    output.seek(0)
+    return output.getvalue()
 
 
 # ==========================================
@@ -139,7 +132,6 @@ with col_file:
     )
     
     if uploaded_file is not None:
-        # 10MB సైజ్ చెకింగ్
         max_mb = 10
         if uploaded_file.size > max_mb * 1024 * 1024:
             st.error(f"⚠️ ఫైల్ సైజు {max_mb} MB కంటే తక్కువగా ఉండాలి!")
@@ -170,23 +162,15 @@ with col_mic:
         st.session_state.last_mic_text = spoken_result
         st.rerun()
 
-# ప్రధాన టెక్స్ట్ ఏరియా & క్లియర్ బటన్
+# ప్రధాన టెక్స్ట్ ఏరియా
 user_input_text = st.text_area(
-    "ఆడియోగా మార్చాలనుకుంటున్న టెక్స్ట్:", 
+    "ఆడియో/ఫైల్స్‌గా మార్చాలనుకుంటున్న టెక్స్ట్:", 
     value=st.session_state.main_text, 
-    height=140
+    height=150
 )
 
 if user_input_text != st.session_state.main_text:
     st.session_state.main_text = user_input_text
-
-# 🧹 ప్రధాన టెక్స్ట్‌ని క్లియర్ చేసే బటన్
-col_cl1, _ = st.columns([0.2, 0.8])
-with col_cl1:
-    if st.button("🧹 టెక్స్ట్‌ని క్లియర్ చేయి (Clear Text)", use_container_width=True):
-        st.session_state.main_text = ""
-        st.session_state.last_mic_text = ""
-        st.rerun()
 
 
 # ==========================================
@@ -216,64 +200,100 @@ if st.session_state.main_text.strip() or uploaded_file:
     if st.session_state.translated_text:
         st.text_area("అనువాదం అయిన టెక్స్ట్ (Translated Text):", value=st.session_state.translated_text, height=120)
         
-        col_tr_actions1, col_tr_actions2 = st.columns([0.5, 0.5])
-        with col_tr_actions1:
-            if st.button("🎯 ఈ అనువాదాన్ని ఆడియోగా మార్చు (Use for Audio)", use_container_width=True):
-                st.session_state.main_text = st.session_state.translated_text
-                st.success("✅ అనువాదమైన టెక్స్ట్ ప్రధాన బాక్స్‌లోకి మార్చబడింది!")
-                st.rerun()
-        with col_tr_actions2:
-            # 🧹 అనువాదాన్ని క్లియర్ చేసే బటన్
-            if st.button("🧹 అనువాదాన్ని క్లియర్ చేయి (Clear Translation)", use_container_width=True):
-                st.session_state.translated_text = ""
-                st.rerun()
-
-    if uploaded_file and uploaded_file.name.endswith(".docx"):
-        if st.button("📥 ఫోటోలు/సింబల్స్‌తో సహా అనువాద వర్డ్ ఫైల్ (.docx) డౌన్‌లోడ్ చేయి"):
-            with st.spinner("ఫైల్ డిజైన్ మరియు ఫోటోలు పాడవకుండా అనువదిస్తోంది..."):
-                trans_doc_bytes = translate_docx_file(uploaded_file, t_code)
-                st.download_button(
-                    label="💾 అనువాద DOCX ఫైల్ డౌన్‌లోడ్ చేయి",
-                    data=trans_doc_bytes,
-                    file_name=f"translated_{uploaded_file.name}",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
+        if st.button("🎯 ఈ అనువాదాన్ని ప్రధాన బాక్స్‌లోకి మార్చు (Use Translation)"):
+            st.session_state.main_text = st.session_state.translated_text
+            st.success("✅ అనువాదమైన టెక్స్ట్ ప్రధాన బాక్స్‌లోకి మార్చబడింది!")
+            st.rerun()
 
 
 # ==========================================
-# 5. ఆడియో ఎంపికలు & క్రియేషన్
+# 5. ఆడియో ఎంపికలు (Language & Voice Selection)
 # ==========================================
 st.divider()
 col_lang, col_voice = st.columns([0.5, 0.5])
 
 with col_lang:
-    selected_lang = st.selectbox("🌐 ఆడియో భాష:", options=["తెలుగు (Telugu)", "హిందీ (Hindi)", "ఇంగ్లీష్ (English)"])
+    selected_lang = st.selectbox("🌐 ఆడియో భాషను ఎంచుకోండి:", options=["తెలుగు (Telugu)", "హిందీ (Hindi)", "ఇంగ్లీష్ (English)"])
 
 with col_voice:
     if "తెలుగు" in selected_lang:
-        voice_option = st.radio("🎙️ స్వరం:", options=["👨 మోహన్ (పురుష)", "👩 శ్రుతి (స్త్రీ)"], horizontal=True)
+        voice_option = st.radio("🎙️ స్వరాన్ని ఎంచుకోండి:", options=["👨 మోహన్ (పురుష)", "👩 శ్రుతి (స్త్రీ)"], horizontal=True)
     elif "హిందీ" in selected_lang:
-        voice_option = st.radio("🎙️ స్వరం:", options=["👨 మధుర్ (పురుష)", "👩 స్వర్ణ (స్త్రీ)"], horizontal=True)
+        voice_option = st.radio("🎙️ స్వరాన్ని ఎంచుకోండి:", options=["👨 మధుర్ (పురుష)", "👩 స్వర్ణ (స్త్రీ)"], horizontal=True)
     else:
-        voice_option = st.radio("🎙️ స్వరం:", options=["👨 ప్రభాత్ (పురుష)", "👩 నీరజ (స్త్రీ)"], horizontal=True)
-
-convert_btn = st.button("🔊 ఆడియో క్రియేట్ చేయి", type="primary", use_container_width=True)
+        voice_option = st.radio("🎙️ స్వరాన్ని ఎంచుకోండి:", options=["👨 ప్రభాత్ (పురుష)", "👩 నీరజ (స్త్రీ)"], horizontal=True)
 
 
 # ==========================================
-# 6. ఆడియో జనరేషన్
+# 🌟 6. ఐదు ప్రధాన ఆప్షన్ల వరుస (5 Main Action Buttons Row)
+# ==========================================
+st.markdown("##### 🎯 యాక్షన్ కంట్రోల్స్ (Action Controls)")
+
+# టెక్స్ట్ కాన్ఫిగరేషన్ ఎంపిక
+active_text = st.session_state.translated_text.strip() if st.session_state.translated_text.strip() else st.session_state.main_text.strip()
+
+col_btn1, col_btn2, col_btn3, col_btn4, col_btn5 = st.columns([0.22, 0.18, 0.18, 0.22, 0.20])
+
+# 1️⃣ ఆడియో క్రియేట్ బటన్
+with col_btn1:
+    convert_btn = st.button("🔊 ఆడియో చేయి", type="primary", use_container_width=True)
+
+# 2️⃣ PDF డౌన్‌లోడ్ బటన్
+with col_btn2:
+    if active_text:
+        pdf_html = f"<html><head><meta charset='utf-8'></head><body><p style='font-size:16px;'>{active_text.replace('\n', '<br>')}</p></body></html>"
+        st.download_button(
+            label="📄 PDF ఫైల్",
+            data=pdf_html.encode('utf-8'),
+            file_name="spiritual_note.html",
+            mime="text/html",
+            use_container_width=True,
+            help="టెక్స్ట్‌ని ప్ర్రింట్/PDF రూపంలో సేవ్ చేస్తుంది"
+        )
+    else:
+        st.button("📄 PDF ఫైల్", disabled=True, use_container_width=True)
+
+# 3️⃣ Word (.docx) డౌన్‌లోడ్ బటన్
+with col_btn3:
+    if active_text:
+        docx_data = create_docx_bytes(active_text)
+        st.download_button(
+            label="📝 Word ఫైల్",
+            data=docx_data,
+            file_name="spiritual_note.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True
+        )
+    else:
+        st.button("📝 Word ఫైల్", disabled=True, use_container_width=True)
+
+# 4️⃣ Copy Text బటన్
+with col_btn4:
+    if active_text:
+        if st.button("📋 టెక్స్ట్ కాపీ", use_container_width=True):
+            st.code(active_text, language=None)
+            st.toast("✅ పైన ఉన్న టెక్స్ట్‌ని క్లిక్ చేసి కాపీ చేసుకోండి!", icon="📋")
+    else:
+        st.button("📋 టెక్స్ట్ కాపీ", disabled=True, use_container_width=True)
+
+# 5️⃣ Clear All బటన్
+with col_btn5:
+    if st.button("🧹 మొత్తం క్లియర్", use_container_width=True):
+        st.session_state.main_text = ""
+        st.session_state.translated_text = ""
+        st.session_state.audio_bytes_data = None
+        st.session_state.last_mic_text = ""
+        st.rerun()
+
+
+# ==========================================
+# 7. ఆడియో ప్రాసెసింగ్ లాజిక్
 # ==========================================
 if convert_btn:
-    text_to_process = ""
-    if st.session_state.translated_text.strip():
-        text_to_process = st.session_state.translated_text.strip()
-    else:
-        text_to_process = st.session_state.main_text.strip()
-
-    if text_to_process:
+    if active_text:
         with st.spinner("ఆడియో ప్రాసెస్ అవుతోంది... దయచేసి వేచి ఉండండి..."):
             try:
-                clean_txt = re.sub(r'[*#_~`]', '', text_to_process)
+                clean_txt = re.sub(r'[*#_~`]', '', active_text)
                 
                 voice_map = {
                     "👨 మోహన్ (పురుష)": "te-IN-MohanNeural",
@@ -324,21 +344,15 @@ if convert_btn:
     else:
         st.warning("దయచేసి టెక్స్ట్ ఎంటర్ చేయండి లేదా మాట్లాడండి.")
 
-# 📥 స్థిరమైన డిస్‌ప్లే & క్లియర్ ఆప్షన్
+# 📥 స్థిరమైన ఆడియో ప్లేయర్
 if st.session_state.audio_bytes_data is not None:
     st.divider()
     st.audio(st.session_state.audio_bytes_data, format="audio/mp3")
-    col_dl, col_cl_aud = st.columns([0.7, 0.3])
-    with col_dl:
-        st.download_button(
-            label="📥 MP3 ఆడియో ఫైల్‌ని డౌన్‌లోడ్ చేయండి", 
-            data=st.session_state.audio_bytes_data, 
-            file_name="spiritual_audio.mp3", 
-            mime="audio/mp3",
-            key="permanent_download_btn",
-            use_container_width=True
-        )
-    with col_cl_aud:
-        if st.button("🧹 ఆడియోని క్లియర్ చేయి (Clear Audio)", use_container_width=True):
-            st.session_state.audio_bytes_data = None
-            st.rerun()
+    st.download_button(
+        label="📥 MP3 ఆడియో ఫైల్‌ని డౌన్‌లోడ్ చేయండి", 
+        data=st.session_state.audio_bytes_data, 
+        file_name="spiritual_audio.mp3", 
+        mime="audio/mp3",
+        key="permanent_download_btn",
+        use_container_width=True
+    )
