@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("సింపుల్ వెర్షన్ - లైవ్ ఎర్రర్ ట్రాకర్ తో")
+st.caption("అనువాదం, ఫైల్ ఇమేజ్ ప్రొటెక్షన్, లైవ్ మైక్రోఫోన్ & వాయిస్ కన్వర్టర్")
 
 # Session State
 if "voice_input_text" not in st.session_state:
@@ -31,7 +31,7 @@ if "translated_text_val" not in st.session_state:
 
 
 # ==========================================
-# 2. హెల్పర్ ఫంక్షన్స్ (Direct File Stream Fix)
+# 2. హెల్పర్ ఫంక్షన్స్ (Translation & TTS)
 # ==========================================
 
 async def generate_voice_file(text, voice, output_filename):
@@ -40,7 +40,6 @@ async def generate_voice_file(text, voice, output_filename):
 
 
 def split_text_into_chunks(text, max_chars=300):
-    # టెక్స్ట్‌ను క్లీన్ చేసి కేవలం వాక్యాలను మాత్రమే తీసుకోవడం
     clean_text = re.sub(r'\s+', ' ', text).strip()
     sentences = re.split(r'(?<=[.!?\n।])\s+', clean_text)
     chunks = []
@@ -57,6 +56,30 @@ def split_text_into_chunks(text, max_chars=300):
     return [c.strip() for c in chunks if len(c.strip()) > 1]
 
 
+# 5000 క్యారెక్టర్ల లిమిట్ దాటకుండా సురక్షితమైన అనువాద లాజిక్
+def safe_translate_text(text, target_lang_code):
+    if not text or not text.strip():
+        return ""
+    
+    # 2000 క్యారెక్టర్ల ముక్కలుగా కట్ చేయడం
+    paragraphs = text.split("\n")
+    translated_paras = []
+    translator = GoogleTranslator(source='auto', target=target_lang_code)
+
+    for p in paragraphs:
+        if p.strip():
+            if len(p) > 2000:
+                sub_chunks = split_text_into_chunks(p, max_chars=1500)
+                sub_trans = [translator.translate(sc) for sc in sub_chunks if sc.strip()]
+                translated_paras.append(" ".join(sub_trans))
+            else:
+                translated_paras.append(translator.translate(p))
+        else:
+            translated_paras.append("")
+
+    return "\n".join(translated_paras)
+
+
 def extract_text_from_file(uploaded_file):
     extracted = ""
     if uploaded_file.name.endswith(".docx"):
@@ -69,6 +92,26 @@ def extract_text_from_file(uploaded_file):
     elif uploaded_file.name.endswith(".txt"):
         extracted = uploaded_file.read().decode("utf-8")
     return extracted
+
+
+# 🖼️ వర్డ్ ఫైల్‌లోని ఇమేజెస్/ఫోటోస్ అలాగే ఉంచి కేవలం టెక్స్ట్‌ని మాత్రమే అనువదించే ఫంక్షన్
+def translate_docx_file(uploaded_file, target_lang_code):
+    doc = docx.Document(uploaded_file)
+    translator = GoogleTranslator(source='auto', target=target_lang_code)
+
+    for p in doc.paragraphs:
+        if p.text.strip():
+            try:
+                # ప్రతి పారాగ్రాఫ్‌లోని టెక్స్ట్‌ను మాత్రమే మార్చడం (ఇమేజెస్ అలాగే ఉంటాయి)
+                translated_p = translator.translate(p.text)
+                p.text = translated_p
+            except Exception:
+                pass
+
+    output_stream = io.BytesIO()
+    doc.save(output_stream)
+    output_stream.seek(0)
+    return output_stream.getvalue()
 
 
 # ==========================================
@@ -99,7 +142,7 @@ file_extracted_text = ""
 if uploaded_file is not None:
     try:
         file_extracted_text = extract_text_from_file(uploaded_file)
-        st.success(f"✅ ఫైల్ లోడ్ అయింది!")
+        st.success(f"✅ '{uploaded_file.name}' ఫైల్ విజయవంతంగా లోడ్ అయింది!")
     except Exception as fe:
         st.error(f"ఫైల్ చదవడంలో లోపం: {fe}")
 
@@ -109,27 +152,44 @@ user_text = st.text_area("ఆడియోగా మార్చాలనుక�
 
 
 # ==========================================
-# 4. అనువాదం (Translation)
+# 4. అనువాదం (Translator with DOCX Image Protection)
 # ==========================================
-if user_text.strip():
-    st.markdown("##### 🌐 భాషా అనువాదం (Translator)")
+if user_text.strip() or uploaded_file:
+    st.markdown("##### 🌐 భాషా అనువాదం (Language Translator)")
     col_tr1, col_tr2 = st.columns([0.7, 0.3])
+    
     with col_tr1:
         target_trans_lang = st.selectbox("ఏ భాషలోకి మార్చాలి?:", options=["తెలుగు (Telugu)", "హిందీ (Hindi)", "ఇంగ్లీష్ (English)"])
+        lang_code_map = {"తెలుగు (Telugu)": "te", "హిందీ (Hindi)": "hi", "ఇంగ్లీష్ (English)": "en"}
+        t_code = lang_code_map[target_trans_lang]
+
     with col_tr2:
         st.write("")
         st.write("")
-        if st.button("🔄 అనువదించు (Translate)", use_container_width=True):
+        if st.button("🔄 టెక్స్ట్‌ని అనువదించు (Translate)", use_container_width=True):
             try:
-                lang_code_map = {"తెలుగు (Telugu)": "te", "హిందీ (Hindi)": "hi", "ఇంగ్లీష్ (English)": "en"}
-                t = GoogleTranslator(source='auto', target=lang_code_map[target_trans_lang]).translate(user_text)
-                st.session_state["translated_text_val"] = t
-                st.success("✅ అనువాదం పూర్తయింది!")
+                with st.spinner("అనువాదం జరుగుతోంది..."):
+                    t_res = safe_translate_text(user_text, t_code)
+                    st.session_state["translated_text_val"] = t_res
+                    st.success("✅ అనువాదం పూర్తయింది!")
             except Exception as tr_err:
                 st.error(f"అనువాదంలో లోపం: {tr_err}")
 
+    # టెక్స్ట్ రిజల్ట్
     if st.session_state["translated_text_val"]:
-        st.text_area("అనువాదం అయిన టెక్స్ట్:", value=st.session_state["translated_text_val"], height=100)
+        st.text_area("అనువాదం అయిన టెక్స్ట్:", value=st.session_state["translated_text_val"], height=120)
+
+    # 🖼️ ఫైల్‌లో ఉన్న ఫోటోలను అలాగే ఉంచి అనువాద ఫైల్‌ని డౌన్‌లోడ్ చేసే ఆప్షన్ (.docx)
+    if uploaded_file and uploaded_file.name.endswith(".docx"):
+        if st.button("📥 ఫోటోలు/సింబల్స్‌తో సహా అనువాద వర్డ్ ఫైల్ (.docx) డౌన్‌లోడ్ చేయి"):
+            with st.spinner("ఫైల్ డిజైన్ మరియు ఫోటోలు పాడవకుండా అనువదిస్తోంది..."):
+                trans_doc_bytes = translate_docx_file(uploaded_file, t_code)
+                st.download_button(
+                    label="💾 అనువాద DOCX ఫైల్ డౌన్‌లోడ్ చేయి",
+                    data=trans_doc_bytes,
+                    file_name=f"translated_{uploaded_file.name}",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
 
 
 # ==========================================
@@ -179,19 +239,17 @@ if convert_btn:
                 for i, chunk in enumerate(text_chunks):
                     temp_file = f"temp_{i}.mp3"
                     try:
-                        # 🛠️ డైరెక్ట్ ఫైల్‌కి సేవ్ చేసి ఆడియో రీడ్ చేసే గ్యారెంటీ లాజిక్
                         asyncio.run(generate_voice_file(chunk, selected_voice, temp_file))
                         
                         if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
                             chunk_sound = AudioSegment.from_file(temp_file)
                             speech_sound += chunk_sound
-                            os.remove(temp_file) # తాత్కాలిక ఫైల్ ని తొలగించడం
+                            os.remove(temp_file)
                         else:
                             debug_logs.append(f"Chunk {i+1}: ఫైల్ ఖాళీగా క్రియేట్ అయింది.")
                     except Exception as chunk_ex:
                         debug_logs.append(f"Chunk {i+1} Error: {str(chunk_ex)}")
 
-                # BGM మిక్సింగ్
                 if len(speech_sound) > 0:
                     final_sound = speech_sound
                     if os.path.exists("bgm.mp3"):
