@@ -7,7 +7,6 @@ import re
 import os
 import traceback
 import docx
-from pypdf import PdfReader
 from deep_translator import GoogleTranslator
 from streamlit_mic_recorder import speech_to_text
 
@@ -21,7 +20,7 @@ st.set_page_config(
 )
 
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("అనువాదం, ఫైల్ ప్రొటెక్షన్, లైవ్ మైక్రోఫోన్ & ఆడియో కన్వర్షన్ - పర్ఫెక్ట్ కనెక్షన్")
+st.caption("అనువాదం, వర్డ్/టెక్స్ట్ ఫైల్ ప్రొటెక్షన్, లైవ్ మైక్రోఫోన్ & వాయిస్ కన్వర్టర్")
 
 # సెషన్ స్టేట్స్
 if "main_text" not in st.session_state:
@@ -100,10 +99,6 @@ def extract_text_from_file(uploaded_file):
     if uploaded_file.name.endswith(".docx"):
         doc = docx.Document(uploaded_file)
         extracted = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-    elif uploaded_file.name.endswith(".pdf"):
-        reader = PdfReader(uploaded_file)
-        pdf_text = [page.extract_text() for page in reader.pages if page.extract_text()]
-        extracted = "\n".join(pdf_text)
     elif uploaded_file.name.endswith(".txt"):
         extracted = uploaded_file.read().decode("utf-8")
     return extracted
@@ -136,15 +131,26 @@ col_file, col_mic = st.columns([0.5, 0.5])
 
 uploaded_file = None
 with col_file:
-    uploaded_file = st.file_uploader("📁 మీ ఫైల్‌ను అప్‌లోడ్ చేయండి (.docx, .pdf, .txt):", type=["docx", "pdf", "txt"])
+    st.markdown("**📁 మీ ఫైల్‌ను అప్‌లోడ్ చేయండి (.docx, .txt):**")
+    uploaded_file = st.file_uploader(
+        "గరిష్ఠ సైజు 10MB వరకు అనుకూలం", 
+        type=["docx", "txt"],
+        help="కేవలం Microsoft Word (.docx) లేదా Text (.txt) ఫైల్స్ మాత్రమే సపోర్ట్ చేయబడతాయి."
+    )
+    
     if uploaded_file is not None:
-        try:
-            f_text = extract_text_from_file(uploaded_file)
-            if f_text and f_text != st.session_state.main_text:
-                st.session_state.main_text = f_text
-                st.success(f"✅ '{uploaded_file.name}' లోడ్ అయింది!")
-        except Exception as fe:
-            st.error(f"ఫైల్ చదవడంలో లోపం: {fe}")
+        # 10MB సైజ్ చెకింగ్
+        max_mb = 10
+        if uploaded_file.size > max_mb * 1024 * 1024:
+            st.error(f"⚠️ ఫైల్ సైజు {max_mb} MB కంటే తక్కువగా ఉండాలి!")
+        else:
+            try:
+                f_text = extract_text_from_file(uploaded_file)
+                if f_text and f_text != st.session_state.main_text:
+                    st.session_state.main_text = f_text
+                    st.success(f"✅ '{uploaded_file.name}' విజయవంతంగా లోడ్ అయింది!")
+            except Exception as fe:
+                st.error(f"ఫైల్ చదవడంలో లోపం: {fe}")
 
 with col_mic:
     st.markdown("**🎙️ మైక్రోఫోన్ ద్వారా మాట్లాడండి (Live Voice Typing):**")
@@ -164,7 +170,7 @@ with col_mic:
         st.session_state.last_mic_text = spoken_result
         st.rerun()
 
-# ప్రధాన టెక్స్ట్ ఏరియా
+# ప్రధాన టెక్స్ట్ ఏరియా & క్లియర్ బటన్
 user_input_text = st.text_area(
     "ఆడియోగా మార్చాలనుకుంటున్న టెక్స్ట్:", 
     value=st.session_state.main_text, 
@@ -173,6 +179,14 @@ user_input_text = st.text_area(
 
 if user_input_text != st.session_state.main_text:
     st.session_state.main_text = user_input_text
+
+# 🧹 ప్రధాన టెక్స్ట్‌ని క్లియర్ చేసే బటన్
+col_cl1, _ = st.columns([0.2, 0.8])
+with col_cl1:
+    if st.button("🧹 టెక్స్ట్‌ని క్లియర్ చేయి (Clear Text)", use_container_width=True):
+        st.session_state.main_text = ""
+        st.session_state.last_mic_text = ""
+        st.rerun()
 
 
 # ==========================================
@@ -195,18 +209,24 @@ if st.session_state.main_text.strip() or uploaded_file:
                 with st.spinner("అనువాదం జరుగుతోంది..."):
                     t_res = safe_translate_text(st.session_state.main_text, t_code)
                     st.session_state.translated_text = t_res
-                    st.success("✅ అనువాదం పూర్తయింది! క్రింద అనువాదాన్ని చూడవచ్చు.")
+                    st.success("✅ అనువాదం పూర్తయింది!")
             except Exception as tr_err:
                 st.error(f"అనువాదంలో లోపం: {tr_err}")
 
     if st.session_state.translated_text:
         st.text_area("అనువాదం అయిన టెక్స్ట్ (Translated Text):", value=st.session_state.translated_text, height=120)
         
-        # 🔗 కనెక్షన్ ఫిక్స్: అనువాదమైన టెక్స్ట్‌ను డైరెక్ట్‌గా ఆడియో కోసం ఎంచుకునే బటన్
-        if st.button("🎯 ఈ అనువాదమైన టెక్స్ట్‌నే ఆడియోగా మార్చు (Use Translated Text for Audio)"):
-            st.session_state.main_text = st.session_state.translated_text
-            st.success("✅ అనువాదమైన టెక్స్ట్ ప్రధాన బాక్స్‌లోకి మార్చబడింది!")
-            st.rerun()
+        col_tr_actions1, col_tr_actions2 = st.columns([0.5, 0.5])
+        with col_tr_actions1:
+            if st.button("🎯 ఈ అనువాదాన్ని ఆడియోగా మార్చు (Use for Audio)", use_container_width=True):
+                st.session_state.main_text = st.session_state.translated_text
+                st.success("✅ అనువాదమైన టెక్స్ట్ ప్రధాన బాక్స్‌లోకి మార్చబడింది!")
+                st.rerun()
+        with col_tr_actions2:
+            # 🧹 అనువాదాన్ని క్లియర్ చేసే బటన్
+            if st.button("🧹 అనువాదాన్ని క్లియర్ చేయి (Clear Translation)", use_container_width=True):
+                st.session_state.translated_text = ""
+                st.rerun()
 
     if uploaded_file and uploaded_file.name.endswith(".docx"):
         if st.button("📥 ఫోటోలు/సింబల్స్‌తో సహా అనువాద వర్డ్ ఫైల్ (.docx) డౌన్‌లోడ్ చేయి"):
@@ -241,10 +261,9 @@ convert_btn = st.button("🔊 ఆడియో క్రియేట్ చేయ
 
 
 # ==========================================
-# 6. ఆడియో జనరేషన్ (Smart Dynamic Text Connection Logic)
+# 6. ఆడియో జనరేషన్
 # ==========================================
 if convert_btn:
-    # 🔗 స్మార్ట్ చెకింగ్: అనువాదమైన టెక్స్ట్ ఉంటే దాన్ని లేదా సాధారణ టెక్స్ట్‌ని ఎంచుకుంటుంది
     text_to_process = ""
     if st.session_state.translated_text.strip():
         text_to_process = st.session_state.translated_text.strip()
@@ -305,14 +324,21 @@ if convert_btn:
     else:
         st.warning("దయచేసి టెక్స్ట్ ఎంటర్ చేయండి లేదా మాట్లాడండి.")
 
-# 📥 స్థిరమైన డిస్‌ప్లే
+# 📥 స్థిరమైన డిస్‌ప్లే & క్లియర్ ఆప్షన్
 if st.session_state.audio_bytes_data is not None:
     st.divider()
     st.audio(st.session_state.audio_bytes_data, format="audio/mp3")
-    st.download_button(
-        label="📥 MP3 ఆడియో ఫైల్‌ని డౌన్‌లోడ్ చేయండి", 
-        data=st.session_state.audio_bytes_data, 
-        file_name="spiritual_audio.mp3", 
-        mime="audio/mp3",
-        key="permanent_download_btn"
-    )
+    col_dl, col_cl_aud = st.columns([0.7, 0.3])
+    with col_dl:
+        st.download_button(
+            label="📥 MP3 ఆడియో ఫైల్‌ని డౌన్‌లోడ్ చేయండి", 
+            data=st.session_state.audio_bytes_data, 
+            file_name="spiritual_audio.mp3", 
+            mime="audio/mp3",
+            key="permanent_download_btn",
+            use_container_width=True
+        )
+    with col_cl_aud:
+        if st.button("🧹 ఆడియోని క్లియర్ చేయి (Clear Audio)", use_container_width=True):
+            st.session_state.audio_bytes_data = None
+            st.rerun()
