@@ -34,9 +34,12 @@ if "rename_id" not in st.session_state:
 if "voice_input_text" not in st.session_state:
     st.session_state.voice_input_text = ""
 
+if "translated_text_val" not in st.session_state:
+    st.session_state.translated_text_val = ""
+
 
 # ==========================================
-# 2. హెల్పర్ ఫంక్షన్స్ (Core Engine, File Readers & Translation)
+# 2. హెల్పర్ ఫంక్షన్స్
 # ==========================================
 
 # A. Robust Edge-TTS Async Chunk Generator
@@ -49,7 +52,7 @@ async def generate_voice_chunk(text, voice, pitch_val, rate_val):
     return audio_data
 
 
-# B. Auto-Chunking Logic (Smart Text Splitter)
+# B. Auto-Chunking Logic
 def split_text_into_chunks(text, max_chars=350):
     sentences = re.split(r'(?<=[.!?\n।])\s+', text)
     chunks = []
@@ -66,7 +69,7 @@ def split_text_into_chunks(text, max_chars=350):
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
         
-    return [c for c in chunks if re.search(r'\w', c)]
+    return [c.strip() for c in chunks if c.strip()]
 
 
 # C. File Text Extractor (.docx, .pdf, .txt)
@@ -116,7 +119,7 @@ def translate_text(text, target_lang_code):
 
 
 # ==========================================
-# 3. సైడ్ బార్ (Chat History & Management)
+# 3. సైడ్ బార్
 # ==========================================
 with st.sidebar:
     st.title("🕉️ ఆడియో నోట్స్ కంట్రోల్స్")
@@ -126,6 +129,7 @@ with st.sidebar:
         st.session_state.current_chat_id = new_id
         st.session_state.rename_id = None
         st.session_state.voice_input_text = ""
+        st.session_state.translated_text_val = ""
         st.rerun()
 
     st.divider()
@@ -172,7 +176,7 @@ with st.sidebar:
 
 
 # ==========================================
-# 4. ప్రధాన స్క్రీన్ (Main Display History)
+# 4. ప్రధాన స్క్రీన్
 # ==========================================
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
 st.caption("ఫైల్స్ అప్‌లోడ్, లైవ్ మైక్రోఫోన్ వాయిస్ టైపింగ్, అనువాదం (Translate), పిచ్ కంట్రోల్ మరియు BGM తో ఆడియో సిస్టమ్.")
@@ -241,7 +245,6 @@ with col_mic:
         "ఇంగ్లీష్ (English)": "en-IN"
     }
     
-    # 🎙️ Live Speech to Text Button Component
     spoken_text = speech_to_text(
         start_prompt="🎙️ మాట్లాడటం ప్రారంభించండి (Start)",
         stop_prompt="⏹️ ఆపండి (Stop)",
@@ -252,10 +255,8 @@ with col_mic:
     
     if spoken_text:
         st.session_state.voice_input_text += " " + spoken_text
-        st.success(f"✅ రికార్డ్ అయింది: {spoken_text}")
 
-
-# టెక్స్ట్ ప్రైమరీ సోర్స్ కలెక్షన్
+# టెక్స్ట్ ప్రాసెసింగ్ ప్రాధాన్యత లాజిక్
 file_extracted_text = ""
 if uploaded_file is not None:
     try:
@@ -264,7 +265,6 @@ if uploaded_file is not None:
     except Exception as fe:
         st.error(f"ఫైల్ చదవడంలో లోపం: {fe}")
 
-# మైక్ ద్వారా వచ్చిన టెక్స్ట్ లేదా ఫైల్ టెక్స్ట్ ని డీఫాల్ట్‌గా ఉంచడం
 initial_text_val = file_extracted_text if file_extracted_text else st.session_state.voice_input_text
 
 user_text = st.text_area(
@@ -299,12 +299,13 @@ if user_text.strip():
                 st.session_state["translated_text_val"] = translated_result
                 st.success("✅ టెక్స్ట్ విజయవంతంగా అనువాదం అయింది!")
 
-    if "translated_text_val" in st.session_state and st.session_state["translated_text_val"]:
+    if st.session_state["translated_text_val"]:
         st.text_area(
             "అనువాదం అయిన టెక్స్ట్ (Translated Result):", 
             value=st.session_state["translated_text_val"], 
             height=120
         )
+        st.info("💡 సూచన: పైన ఉన్న అనువాదమైన టెక్స్ట్‌ని ఆడియోగా మార్చాలనుకుంటే అనువాదమైన టెక్స్ట్‌ని పైన బాక్స్‌లో పేస్ట్ చేయవచ్చు లేదా ఉపయోగించవచ్చు.")
 
     w_count, est_mins = get_text_analytics(user_text)
     st.info(f"📊 **మొత్తం పదాలు:** {w_count:,} | ⏱️ **అంచనా ఆడియో సమయం:** ~{est_mins} నిమిషాలు")
@@ -373,15 +374,19 @@ with col_bgm_box:
 
 
 # ==========================================
-# 7. ఆడియో జనరేషన్
+# 7. ఆడియో జనరేషన్ (Smart Target Dynamic Text Logic)
 # ==========================================
 convert_btn = st.button("🔊 ఆధ్యాత్మిక వాయిస్ & BGM క్రియేట్ చేయి", type="primary", use_container_width=True)
 
 if convert_btn:
-    if user_text.strip():
+    # 🎯 ట్రాన్స్‌లేట్ అయిన టెక్స్ట్ ఉంటే దానికి లేదా నార్మల్ ఇన్‌పుట్ టెక్స్ట్‌కి ఆడియో క్రియేట్ చేసే స్మార్ట్ లాజిక్
+    text_to_convert = user_text.strip()
+    
+    if text_to_convert:
         with st.spinner("టెక్స్ట్‌ని ప్రాసెస్ చేసి, BGM మరియు కంట్రోల్స్‌తో ఆడియో క్రియేట్ చేస్తోంది..."):
             try:
-                clean_txt = re.sub(r'[*#_~`]', '', user_text)
+                # టెక్స్ట్ క్లీనింగ్
+                clean_txt = re.sub(r'[*#_~`]', '', text_to_convert)
                 
                 voice_map = {
                     "👨 మోహన్ (పురుష)": ("te-IN-MohanNeural", "మోహన్ (తెలుగు)", "తెలుగు"),
@@ -396,9 +401,9 @@ if convert_btn:
                 rate_str = f"{int((audio_speed - 1.0) * 100):+d}%"
                 
                 pitch_val_map = {
-                    "సాధారణ (Normal)": "+0%",
-                    "గంభీరం (Deep Base)": "-8%",
-                    "అత్యంత గంభీరం (Heavy Base)": "-15%"
+                    "సాధారణ (Normal)": "+0Hz",
+                    "గంభీరం (Deep Base)": "-5Hz",
+                    "అత్యంత గంభీరం (Heavy Base)": "-10Hz"
                 }
                 pitch_str = pitch_val_map[pitch_custom]
 
@@ -443,7 +448,7 @@ if convert_btn:
                     audio_bytes = final_fp.getvalue()
 
                     current_chat["messages"].append({
-                        "text": user_text,
+                        "text": text_to_convert,
                         "audio": audio_bytes,
                         "speed": audio_speed,
                         "voice_name": voice_label,
@@ -453,7 +458,7 @@ if convert_btn:
                     })
 
                     if len(current_chat["messages"]) == 1 or current_chat["title"] == "కొత్త ఆడియో నోట్":
-                        current_chat["title"] = user_text[:20] + ("..." if len(user_text) > 20 else "")
+                        current_chat["title"] = text_to_convert[:20] + ("..." if len(text_to_convert) > 20 else "")
 
                     st.success(f"🎉 {lang_label} ఆడియో విజయవంతంగా సిద్ధమైంది!")
                     st.rerun()
