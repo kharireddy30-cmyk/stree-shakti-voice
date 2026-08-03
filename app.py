@@ -32,7 +32,7 @@ if "rename_id" not in st.session_state:
 
 
 # ==========================================
-# 2. హెల్పర్ ఫంక్షన్స్ (Core TTS, Translation & File Logic)
+# 2. హెల్పర్ ఫంక్షన్స్ (Core Engine, File Readers & Translation)
 # ==========================================
 
 # A. Edge-TTS Async Chunk Generator
@@ -96,7 +96,6 @@ def get_text_analytics(text, speed_factor=0.85):
 # E. Free Translation Helper Logic
 def translate_text(text, target_lang_code):
     try:
-        # 4000 క్యారెక్టర్లు దాటితే చిన్న ముక్కలుగా చేసి ట్రాన్స్‌లేట్ చేయడానికి లాజిక్
         if len(text) > 4000:
             chunks = split_text_into_chunks(text, max_chars=3000)
             translated_chunks = []
@@ -107,12 +106,12 @@ def translate_text(text, target_lang_code):
         else:
             return GoogleTranslator(source='auto', target=target_lang_code).translate(text)
     except Exception as e:
-        st.error(f"అనువాదం (Translation) చేయడంలో లోపం: {e}")
+        st.error(f"అనువాదం చేయడంలో లోపం వచ్చింది: {e}")
         return text
 
 
 # ==========================================
-# 3. సైడ్ బార్
+# 3. సైడ్ బార్ (Chat History & Management)
 # ==========================================
 with st.sidebar:
     st.title("🕉️ ఆడియో నోట్స్ కంట్రోల్స్")
@@ -128,7 +127,11 @@ with st.sidebar:
     
     for chat_id in list(st.session_state.chat_history.keys()):
         if st.session_state.rename_id == chat_id:
-            new_title = st.text_input("కొత్త టైటిల్ ఇవ్వండి:", value=st.session_state.chat_history[chat_id]["title"], key=f"input_ren_{chat_id}")
+            new_title = st.text_input(
+                "కొత్త టైటిల్ ఇవ్వండి:", 
+                value=st.session_state.chat_history[chat_id]["title"], 
+                key=f"input_ren_{chat_id}"
+            )
             col_s1, col_s2 = st.columns(2)
             with col_s1:
                 if st.button("Save", key=f"save_title_{chat_id}"):
@@ -163,14 +166,15 @@ with st.sidebar:
 
 
 # ==========================================
-# 4. ప్రధాన స్క్రీన్
+# 4. ప్రధాన స్క్రీన్ (Main Display History)
 # ==========================================
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("టెక్స్ట్/ఫైల్స్‌ను ఆడియోగా మార్చవచ్చు, అలాగే ఒక భాష నుండి మరొక భాషలోకి ఉచితంగా అనువాదం (Translate) చేసుకోవచ్చు.")
+st.caption("కట్ కాకుండా ఫైల్స్ అప్‌లోడ్, అనువాదం (Translate), పేరాల మధ్య విరామం (Pause), పిచ్ కంట్రోల్ మరియు BGM తో అధునాతన ఆడియో సిస్టమ్.")
 
 current_chat = st.session_state.chat_history[st.session_state.current_chat_id]
 msg_to_delete = None
 
+# సేవ్ అయిన సందేశాలు & ఆడియోలు చూపించడం
 for idx, m in enumerate(current_chat["messages"]):
     with st.chat_message("assistant", avatar="🕉️"):
         st.markdown(m["text"])
@@ -205,12 +209,13 @@ if msg_to_delete is not None:
 
 
 # ==========================================
-# 5. ఇన్‌పుట్, ఫైల్ అప్‌లోడ్ & అనువాదం (Translation UI)
+# 5. ఇన్‌పుట్, ఫైల్ అప్‌లోడ్ & అనువాద విభాగం
 # ==========================================
 st.divider()
 
+# A. ఫైల్ అప్‌లోడర్
 uploaded_file = st.file_uploader(
-    "📁 మీ మురళీ/టెక్స్ట్ ఫైల్‌ను ఇక్కడ అప్‌లోడ్ చేయండి (.docx, .pdf, .txt):", 
+    "📁 మీ మురళీ ఫైల్‌ను ఇక్కడ అప్‌లోడ్ చేయండి (.docx, .pdf, .txt):", 
     type=["docx", "pdf", "txt"],
     help="వర్డ్ ఫైల్, పీడీఎఫ్ లేదా టెక్స్ట్ ఫైల్‌ని అప్‌లోడ్ చేస్తే ఆటోమేటిక్‌గా టెక్స్ట్ చదవబడుతుంది."
 )
@@ -223,14 +228,15 @@ if uploaded_file is not None:
     except Exception as fe:
         st.error(f"ఫైల్ చదవడంలో లోపం వచ్చింది: {fe}")
 
+# B. ప్రైమరీ టెక్స్ట్ ఏరియా
 user_text = st.text_area(
-    "ఆడియో లేదా అనువాదం చేయాలనుకుంటున్న టెక్స్ట్ (ఫైల్ అప్‌లోడ్ చేయవచ్చు లేదా నేరుగా ఇక్కడ పేస్ట్ చేయవచ్చు):", 
+    "ఆడియోగా మార్చాలనుకుంటున్న టెక్స్ట్ (ఫైల్ అప్‌లోడ్ చేయవచ్చు లేదా నేరుగా ఇక్కడ పేస్ట్ చేయవచ్చు):", 
     value=file_extracted_text,
     height=150, 
     placeholder="బాబా చెప్పారు... / बाबा ने कहा... / Baba said..."
 )
 
-# ✨ బహుభాషా అనువాద ఫీచర్ (Language Translator Tool)
+# C. గూగుల్ ట్రాన్స్‌లేటర్ విజెట్ (Translate Tool)
 if user_text.strip():
     st.markdown("##### 🌐 భాషా అనువాదం (Language Translator)")
     col_tr1, col_tr2 = st.columns([0.7, 0.3])
@@ -241,10 +247,10 @@ if user_text.strip():
             key="trans_target"
         )
     with col_tr2:
-        st.write("") # స్పేసింగ్ కోసం
         st.write("")
-        if st.button("🔄 టెక్స్ట్‌ని అనువదించు (Translate Text)", use_container_width=True):
-            with st.spinner("గూగుల్ ట్రాన్స్‌లేటర్ సహాయంతో మార్చబడుతోంది..."):
+        st.write("")
+        if st.button("🔄 టెక్స్ట్‌ని అనువదించు (Translate)", use_container_width=True):
+            with st.spinner("గూగుల్ ట్రాన్స్‌లేటర్ సహాయంతో ఉచితంగా మార్చబడుతోంది..."):
                 lang_code_map = {
                     "తెలుగు (Telugu)": "te",
                     "హిందీ (Hindi)": "hi",
@@ -253,20 +259,23 @@ if user_text.strip():
                 t_code = lang_code_map[target_trans_lang]
                 translated_result = translate_text(user_text, t_code)
                 st.session_state["translated_text_val"] = translated_result
-                st.success("✅ టెక్స్ట్ విజయవంతంగా అనువాదం అయింది! క్రింద చూడండి.")
+                st.success("✅ టెక్స్ట్ విజయవంతంగా అనువాదం అయింది!")
 
-    # అనువాదం అయిన టెక్స్ట్ బాక్స్
     if "translated_text_val" in st.session_state and st.session_state["translated_text_val"]:
-        st.text_area("అనువాదం అయిన టెక్స్ట్ (Translated Result):", value=st.session_state["translated_text_val"], height=120)
-        st.caption("💡 గమనిక: ఆడియో క్రియేట్ చేయడానికి పైన ఉన్న ప్రధాన బాక్స్‌లో ఈ టెక్స్ట్‌ను వాడుకోవచ్చు.")
+        st.text_area(
+            "అనువాదం అయిన టెక్స్ట్ (Translated Result):", 
+            value=st.session_state["translated_text_val"], 
+            height=120
+        )
+        st.caption("💡 గమనిక: ఈ అనువాదమైన టెక్స్ట్‌ను కాపీ చేసి పైన ఉన్న ప్రధాన బాక్స్‌లో పేస్ట్ చేయడం ద్వారా ఆ భాషా స్వరంలో ఆడియో తయారు చేయవచ్చు.")
 
-    # టెక్స్ట్ అనలిటిక్స్
+    # అనలిటిక్స్ కార్డ్
     w_count, est_mins = get_text_analytics(user_text)
-    st.info(f"📊 **మొత్తం పదాలు:** {w_count:,} | ⏱️ **అంచనా ఆడియో సమయం:** ~{est_mins} నిమిషాలు")
+    st.info(f"📊 **మొత్తం పదాలు:** {w_count:,} | ⏱️ **అంచనా ఆడియో సమయం:** ~{est_mins} నిమిషాలు (ప్రశాంతమైన వేగం వద్ద)")
 
 
 # ==========================================
-# 6. ఆడియో సెట్టింగ్స్ & వాయిస్ ఎంపిక
+# 6. ఆడియో సెట్టింగ్స్ & అడ్వాన్స్డ్ కంట్రోల్స్
 # ==========================================
 col_lang, col_voice, col_speed = st.columns([0.3, 0.35, 0.35])
 
@@ -303,7 +312,7 @@ with col_speed:
         value=0.85
     )
 
-st.markdown("##### ⚙️ అడ్వాన్స్డ్ ఆడియో సెట్టింగ్స్")
+st.markdown("##### ⚙️ అడ్వాన్స్డ్ ఆడియో సెట్టింగ్స్ (Advanced Fine-Tuning)")
 col_pause, col_pitch, col_bgm_box = st.columns([0.33, 0.33, 0.34])
 
 with col_pause:
@@ -312,14 +321,16 @@ with col_pause:
         min_value=0.3,
         max_value=2.0,
         value=0.6,
-        step=0.1
+        step=0.1,
+        help="వాక్యానికి వాక్యానికి మధ్య ప్రశాంతమైన నిశ్శబ్దం (Silence). ధారణకు 0.6s - 1.0s ఉత్తమం."
     )
 
 with col_pitch:
     pitch_custom = st.select_slider(
-        "🎚️ వాయిస్ పిచ్ (Pitch Base):",
+        "🎚️ వాయిస్ గంభీరత (Pitch Base):",
         options=["సాధారణ (Normal)", "గంభీరం (Deep Base)", "అత్యంత గంభీరం (Heavy Base)"],
-        value="సాధారణ (Normal)"
+        value="గంభీరం (Deep Base)",
+        help="స్వరం ఎంత బేస్/గంభీరంగా ఉండాలో ఎంచుకోండి."
     )
 
 with col_bgm_box:
@@ -328,17 +339,15 @@ with col_bgm_box:
 
 
 # ==========================================
-# 7. ఆడియో జనరేషన్
+# 7. ఆడియో జనరేషన్ అండ్ ప్రాసెసింగ్
 # ==========================================
-convert_btn = st.button("🔊 వాయిస్ & BGM ఆడియో క్రియేట్ చేయి", type="primary", use_container_width=True)
+convert_btn = st.button("🔊 ఆధ్యాత్మిక వాయిస్ & BGM క్రియేట్ చేయి", type="primary", use_container_width=True)
 
 if convert_btn:
-    # యూజర్ అనువాదం అయిన టెక్స్ట్ ఉంటే దాన్నే ఆడియోగా మార్చాలనుకుంటే లేదా నార్మల్ టెక్స్ట్
-    text_to_process = user_text
     if user_text.strip():
-        with st.spinner("టెక్స్ట్‌ని ప్రాసెస్ చేసి, ఆడియో క్రియేట్ చేస్తోంది..."):
+        with st.spinner("టెక్స్ట్‌ని ప్రాసెస్ చేసి, BGM మరియు కంట్రోల్స్‌తో ఆడియో క్రియేట్ చేస్తోంది..."):
             try:
-                clean_txt = text_to_process.replace("*", "").replace("#", "")
+                clean_txt = user_text.replace("*", "").replace("#", "")
                 
                 voice_map = {
                     "👨 మోహన్ (పురుష)": ("te-IN-MohanNeural", "మోహన్ (తెలుగు)", "తెలుగు"),
@@ -393,7 +402,7 @@ if convert_btn:
                 audio_bytes = final_fp.getvalue()
 
                 current_chat["messages"].append({
-                    "text": text_to_process,
+                    "text": user_text,
                     "audio": audio_bytes,
                     "speed": audio_speed,
                     "voice_name": voice_label,
@@ -403,7 +412,7 @@ if convert_btn:
                 })
 
                 if len(current_chat["messages"]) == 1 or current_chat["title"] == "కొత్త ఆడియో నోట్":
-                    current_chat["title"] = text_to_process[:20] + ("..." if len(text_to_process) > 20 else "")
+                    current_chat["title"] = user_text[:20] + ("..." if len(user_text) > 20 else "")
 
                 st.success(f"🎉 {lang_label} ఆడియో విజయవంతంగా సిద్ధమైంది!")
                 st.rerun()
