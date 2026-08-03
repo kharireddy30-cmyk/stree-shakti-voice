@@ -35,7 +35,7 @@ if "rename_id" not in st.session_state:
 # 2. హెల్పర్ ఫంక్షన్స్ (Core Engine, File Readers & Translation)
 # ==========================================
 
-# A. Edge-TTS Async Chunk Generator
+# A. Robust Edge-TTS Async Chunk Generator
 async def generate_voice_chunk(text, voice, pitch_val, rate_val):
     communicate = edge_tts.Communicate(text, voice, pitch=pitch_val, rate=rate_val)
     audio_data = b""
@@ -45,8 +45,8 @@ async def generate_voice_chunk(text, voice, pitch_val, rate_val):
     return audio_data
 
 
-# B. Auto-Chunking Logic (Smart Text Splitter)
-def split_text_into_chunks(text, max_chars=800):
+# B. Auto-Chunking Logic (Smart Text Splitter & Clean Extractor)
+def split_text_into_chunks(text, max_chars=350):
     sentences = re.split(r'(?<=[.!?\n।])\s+', text)
     chunks = []
     current_chunk = ""
@@ -62,7 +62,8 @@ def split_text_into_chunks(text, max_chars=800):
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
         
-    return chunks
+    # కేవలం టెక్స్ట్ ఉన్న ముక్కలను మాత్రమే ఫిల్టర్ చేయడం
+    return [c for c in chunks if re.search(r'\w', c)]
 
 
 # C. File Text Extractor (.docx, .pdf, .txt)
@@ -93,7 +94,7 @@ def get_text_analytics(text, speed_factor=0.85):
     return word_count, round(estimated_minutes, 1)
 
 
-# E. Free Translation Helper Logic (Chunked & Robust)
+# E. Free Translation Helper Logic (Chunked & Safe)
 def translate_text(text, target_lang_code):
     try:
         chunks = split_text_into_chunks(text, max_chars=800)
@@ -319,14 +320,14 @@ with col_pause:
         max_value=2.0,
         value=0.6,
         step=0.1,
-        help="వాక్యానికి వాక్యానికి మధ్య ప్రశాంతమైన నిశ్శబ్దం (Silence). ధారణకు 0.6s - 1.0s ఉత్తమం."
+        help="వాక్యానికి వాక్యానికి మధ్య ప్రశాంతమైన నిశ్శబ్దం (Silence)."
     )
 
 with col_pitch:
     pitch_custom = st.select_slider(
         "🎚️ వాయిస్ గంభీరత (Pitch Base):",
         options=["సాధారణ (Normal)", "గంభీరం (Deep Base)", "అత్యంత గంభీరం (Heavy Base)"],
-        value="గంభీరం (Deep Base)",
+        value="సాధారణ (Normal)",
         help="స్వరం ఎంత బేస్/గంభీరంగా ఉండాలో ఎంచుకోండి."
     )
 
@@ -344,7 +345,8 @@ if convert_btn:
     if user_text.strip():
         with st.spinner("టెక్స్ట్‌ని ప్రాసెస్ చేసి, BGM మరియు కంట్రోల్స్‌తో ఆడియో క్రియేట్ చేస్తోంది..."):
             try:
-                clean_txt = user_text.replace("*", "").replace("#", "")
+                # స్పెషల్ సింబల్స్ క్లీన్ చేయడం
+                clean_txt = re.sub(r'[*#_~`]', '', user_text)
                 
                 voice_map = {
                     "👨 మోహన్ (పురుష)": ("te-IN-MohanNeural", "మోహన్ (తెలుగు)", "తెలుగు"),
@@ -358,10 +360,11 @@ if convert_btn:
 
                 rate_str = f"{int((audio_speed - 1.0) * 100):+d}%"
                 
+                # 🛠️ పిచ్‌ని సురక్షితమైన పర్సంటేజ్ (%) రూపాంలోకి మార్చడం
                 pitch_val_map = {
-                    "సాధారణ (Normal)": "0Hz",
-                    "గంభీరం (Deep Base)": "-10Hz" if "పురుష" in voice_option else "-5Hz",
-                    "అత్యంత గంభీరం (Heavy Base)": "-18Hz" if "పురుష" in voice_option else "-10Hz"
+                    "సాధారణ (Normal)": "+0%",
+                    "గంభీరం (Deep Base)": "-8%",
+                    "అత్యంత గంభీరం (Heavy Base)": "-15%"
                 }
                 pitch_str = pitch_val_map[pitch_custom]
 
@@ -371,48 +374,56 @@ if convert_btn:
                 silence_pause = AudioSegment.silent(duration=int(pause_duration * 1000))
 
                 for chunk in text_chunks:
-                    raw_audio = asyncio.run(generate_voice_chunk(chunk, selected_voice_code, pitch_str, rate_str))
-                    chunk_sound = AudioSegment.from_file(io.BytesIO(raw_audio), format="mp3")
-                    speech_sound += chunk_sound + silence_pause
-
-                final_sound = speech_sound
-                bgm_status = "No"
-
-                if enable_bgm and os.path.exists("bgm.mp3"):
                     try:
-                        bgm_sound = AudioSegment.from_file("bgm.mp3")
-                        if len(bgm_sound) < len(speech_sound):
-                            loops_required = (len(speech_sound) // len(bgm_sound)) + 1
-                            bgm_sound = bgm_sound * loops_required
-                        
-                        bgm_sound = bgm_sound[:len(speech_sound) + 1000]
-                        reduction_db = 22 - (bgm_volume * 1.5)
-                        bgm_sound = bgm_sound - reduction_db
-                        final_sound = speech_sound.overlay(bgm_sound)
-                        bgm_status = f"Yes ({bgm_volume}%)"
-                    except Exception as bgm_err:
-                        st.warning(f"BGM మిక్సింగ్ లో సమస్య: {bgm_err}")
+                        raw_audio = asyncio.run(generate_voice_chunk(chunk, selected_voice_code, pitch_str, rate_str))
+                        if raw_audio and len(raw_audio) > 0:
+                            chunk_sound = AudioSegment.from_file(io.BytesIO(raw_audio), format="mp3")
+                            speech_sound += chunk_sound + silence_pause
+                    except Exception as chunk_err:
+                        st.warning(f"చిన్న ముక్కను ప్రాసెస్ చేయడంలో లోపం వచ్చింది (స్కిప్ చేయబడింది): {chunk_err}")
+                        continue
 
-                final_fp = io.BytesIO()
-                final_sound.export(final_fp, format="mp3")
-                final_fp.seek(0)
-                audio_bytes = final_fp.getvalue()
+                if len(speech_sound) == 0:
+                    st.error("ఆడియో డేటా ఏదీ జనరేట్ కాలేదు. దయచేసి టెక్స్ట్ సరిగ్గా ఉందో లేదో తనిఖీ చేయండి.")
+                else:
+                    final_sound = speech_sound
+                    bgm_status = "No"
 
-                current_chat["messages"].append({
-                    "text": user_text,
-                    "audio": audio_bytes,
-                    "speed": audio_speed,
-                    "voice_name": voice_label,
-                    "lang_name": lang_label,
-                    "pause_sec": pause_duration,
-                    "bgm_status": bgm_status
-                })
+                    if enable_bgm and os.path.exists("bgm.mp3"):
+                        try:
+                            bgm_sound = AudioSegment.from_file("bgm.mp3")
+                            if len(bgm_sound) < len(speech_sound):
+                                loops_required = (len(speech_sound) // len(bgm_sound)) + 1
+                                bgm_sound = bgm_sound * loops_required
+                            
+                            bgm_sound = bgm_sound[:len(speech_sound) + 1000]
+                            reduction_db = 22 - (bgm_volume * 1.5)
+                            bgm_sound = bgm_sound - reduction_db
+                            final_sound = speech_sound.overlay(bgm_sound)
+                            bgm_status = f"Yes ({bgm_volume}%)"
+                        except Exception as bgm_err:
+                            st.warning(f"BGM మిక్సింగ్ లో సమస్య: {bgm_err}")
 
-                if len(current_chat["messages"]) == 1 or current_chat["title"] == "కొత్త ఆడియో నోట్":
-                    current_chat["title"] = user_text[:20] + ("..." if len(user_text) > 20 else "")
+                    final_fp = io.BytesIO()
+                    final_sound.export(final_fp, format="mp3")
+                    final_fp.seek(0)
+                    audio_bytes = final_fp.getvalue()
 
-                st.success(f"🎉 {lang_label} ఆడియో విజయవంతంగా సిద్ధమైంది!")
-                st.rerun()
+                    current_chat["messages"].append({
+                        "text": user_text,
+                        "audio": audio_bytes,
+                        "speed": audio_speed,
+                        "voice_name": voice_label,
+                        "lang_name": lang_label,
+                        "pause_sec": pause_duration,
+                        "bgm_status": bgm_status
+                    })
+
+                    if len(current_chat["messages"]) == 1 or current_chat["title"] == "కొత్త ఆడియో నోట్":
+                        current_chat["title"] = user_text[:20] + ("..." if len(user_text) > 20 else "")
+
+                    st.success(f"🎉 {lang_label} ఆడియో విజయవంతంగా సిద్ధమైంది!")
+                    st.rerun()
 
             except Exception as e:
                 st.error(f"ఆడియో తయారీలో లోపం: {e}")
