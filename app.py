@@ -46,7 +46,7 @@ async def generate_voice_chunk(text, voice, pitch_val, rate_val):
 
 
 # B. Auto-Chunking Logic (Smart Text Splitter)
-def split_text_into_chunks(text, max_chars=350):
+def split_text_into_chunks(text, max_chars=800):
     sentences = re.split(r'(?<=[.!?\n।])\s+', text)
     chunks = []
     current_chunk = ""
@@ -93,18 +93,19 @@ def get_text_analytics(text, speed_factor=0.85):
     return word_count, round(estimated_minutes, 1)
 
 
-# E. Free Translation Helper Logic
+# E. Free Translation Helper Logic (Chunked & Robust)
 def translate_text(text, target_lang_code):
     try:
-        if len(text) > 4000:
-            chunks = split_text_into_chunks(text, max_chars=3000)
-            translated_chunks = []
-            for c in chunks:
-                t = GoogleTranslator(source='auto', target=target_lang_code).translate(c)
+        chunks = split_text_into_chunks(text, max_chars=800)
+        translated_chunks = []
+        translator = GoogleTranslator(source='auto', target=target_lang_code)
+        
+        for chunk in chunks:
+            if chunk.strip():
+                t = translator.translate(chunk)
                 translated_chunks.append(t)
-            return " ".join(translated_chunks)
-        else:
-            return GoogleTranslator(source='auto', target=target_lang_code).translate(text)
+                
+        return " ".join(translated_chunks)
     except Exception as e:
         st.error(f"అనువాదం చేయడంలో లోపం వచ్చింది: {e}")
         return text
@@ -174,7 +175,6 @@ st.caption("కట్ కాకుండా ఫైల్స్ అప్‌ల�
 current_chat = st.session_state.chat_history[st.session_state.current_chat_id]
 msg_to_delete = None
 
-# సేవ్ అయిన సందేశాలు & ఆడియోలు చూపించడం
 for idx, m in enumerate(current_chat["messages"]):
     with st.chat_message("assistant", avatar="🕉️"):
         st.markdown(m["text"])
@@ -213,7 +213,6 @@ if msg_to_delete is not None:
 # ==========================================
 st.divider()
 
-# A. ఫైల్ అప్‌లోడర్
 uploaded_file = st.file_uploader(
     "📁 మీ మురళీ ఫైల్‌ను ఇక్కడ అప్‌లోడ్ చేయండి (.docx, .pdf, .txt):", 
     type=["docx", "pdf", "txt"],
@@ -228,7 +227,6 @@ if uploaded_file is not None:
     except Exception as fe:
         st.error(f"ఫైల్ చదవడంలో లోపం వచ్చింది: {fe}")
 
-# B. ప్రైమరీ టెక్స్ట్ ఏరియా
 user_text = st.text_area(
     "ఆడియోగా మార్చాలనుకుంటున్న టెక్స్ట్ (ఫైల్ అప్‌లోడ్ చేయవచ్చు లేదా నేరుగా ఇక్కడ పేస్ట్ చేయవచ్చు):", 
     value=file_extracted_text,
@@ -236,7 +234,7 @@ user_text = st.text_area(
     placeholder="బాబా చెప్పారు... / बाबा ने कहा... / Baba said..."
 )
 
-# C. గూగుల్ ట్రాన్స్‌లేటర్ విజెట్ (Translate Tool)
+# గూగుల్ ట్రాన్స్‌లేటర్ విజెట్
 if user_text.strip():
     st.markdown("##### 🌐 భాషా అనువాదం (Language Translator)")
     col_tr1, col_tr2 = st.columns([0.7, 0.3])
@@ -269,7 +267,6 @@ if user_text.strip():
         )
         st.caption("💡 గమనిక: ఈ అనువాదమైన టెక్స్ట్‌ను కాపీ చేసి పైన ఉన్న ప్రధాన బాక్స్‌లో పేస్ట్ చేయడం ద్వారా ఆ భాషా స్వరంలో ఆడియో తయారు చేయవచ్చు.")
 
-    # అనలిటిక్స్ కార్డ్
     w_count, est_mins = get_text_analytics(user_text)
     st.info(f"📊 **మొత్తం పదాలు:** {w_count:,} | ⏱️ **అంచనా ఆడియో సమయం:** ~{est_mins} నిమిషాలు (ప్రశాంతమైన వేగం వద్ద)")
 
@@ -312,7 +309,7 @@ with col_speed:
         value=0.85
     )
 
-st.markdown("##### ⚙️ అడ్వాన్స్డ్ ఆడియో సెట్టింగ్స్ (Advanced Fine-Tuning)")
+st.markdown("##### ⚙️ అడ్వాన్స్డ్ ఆడియో సెట్టింగ్స్")
 col_pause, col_pitch, col_bgm_box = st.columns([0.33, 0.33, 0.34])
 
 with col_pause:
@@ -339,7 +336,7 @@ with col_bgm_box:
 
 
 # ==========================================
-# 7. ఆడియో జనరేషన్ అండ్ ప్రాసెసింగ్
+# 7. ఆడియో జనరేషన్
 # ==========================================
 convert_btn = st.button("🔊 ఆధ్యాత్మిక వాయిస్ & BGM క్రియేట్ చేయి", type="primary", use_container_width=True)
 
