@@ -9,6 +9,7 @@ import os
 import docx
 from pypdf import PdfReader
 from deep_translator import GoogleTranslator
+from streamlit_mic_recorder import speech_to_text
 
 # ==========================================
 # 1. పేజీ సెట్టింగ్స్ & కాన్ఫిగరేషన్
@@ -30,6 +31,9 @@ if "current_chat_id" not in st.session_state:
 if "rename_id" not in st.session_state:
     st.session_state.rename_id = None
 
+if "voice_input_text" not in st.session_state:
+    st.session_state.voice_input_text = ""
+
 
 # ==========================================
 # 2. హెల్పర్ ఫంక్షన్స్ (Core Engine, File Readers & Translation)
@@ -45,7 +49,7 @@ async def generate_voice_chunk(text, voice, pitch_val, rate_val):
     return audio_data
 
 
-# B. Auto-Chunking Logic (Smart Text Splitter & Clean Extractor)
+# B. Auto-Chunking Logic (Smart Text Splitter)
 def split_text_into_chunks(text, max_chars=350):
     sentences = re.split(r'(?<=[.!?\n।])\s+', text)
     chunks = []
@@ -62,7 +66,6 @@ def split_text_into_chunks(text, max_chars=350):
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
         
-    # కేవలం టెక్స్ట్ ఉన్న ముక్కలను మాత్రమే ఫిల్టర్ చేయడం
     return [c for c in chunks if re.search(r'\w', c)]
 
 
@@ -94,7 +97,7 @@ def get_text_analytics(text, speed_factor=0.85):
     return word_count, round(estimated_minutes, 1)
 
 
-# E. Free Translation Helper Logic (Chunked & Safe)
+# E. Free Translation Helper Logic
 def translate_text(text, target_lang_code):
     try:
         chunks = split_text_into_chunks(text, max_chars=800)
@@ -122,6 +125,7 @@ with st.sidebar:
         st.session_state.chat_history[new_id] = {"title": "కొత్త ఆడియో నోట్", "messages": []}
         st.session_state.current_chat_id = new_id
         st.session_state.rename_id = None
+        st.session_state.voice_input_text = ""
         st.rerun()
 
     st.divider()
@@ -171,7 +175,7 @@ with st.sidebar:
 # 4. ప్రధాన స్క్రీన్ (Main Display History)
 # ==========================================
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("కట్ కాకుండా ఫైల్స్ అప్‌లోడ్, అనువాదం (Translate), పేరాల మధ్య విరామం (Pause), పిచ్ కంట్రోల్ మరియు BGM తో అధునాతన ఆడియో సిస్టమ్.")
+st.caption("ఫైల్స్ అప్‌లోడ్, లైవ్ మైక్రోఫోన్ వాయిస్ టైపింగ్, అనువాదం (Translate), పిచ్ కంట్రోల్ మరియు BGM తో ఆడియో సిస్టమ్.")
 
 current_chat = st.session_state.chat_history[st.session_state.current_chat_id]
 msg_to_delete = None
@@ -210,29 +214,64 @@ if msg_to_delete is not None:
 
 
 # ==========================================
-# 5. ఇన్‌పుట్, ఫైల్ అప్‌లోడ్ & అనువాద విభాగం
+# 5. ఇన్‌పుట్, ఫైల్ అప్‌లోడ్, లైవ్ మైక్రోఫోన్ & అనువాదం
 # ==========================================
 st.divider()
 
-uploaded_file = st.file_uploader(
-    "📁 మీ మురళీ ఫైల్‌ను ఇక్కడ అప్‌లోడ్ చేయండి (.docx, .pdf, .txt):", 
-    type=["docx", "pdf", "txt"],
-    help="వర్డ్ ఫైల్, పీడీఎఫ్ లేదా టెక్స్ట్ ఫైల్‌ని అప్‌లోడ్ చేస్తే ఆటోమేటిక్‌గా టెక్స్ట్ చదవబడుతుంది."
-)
+col_file, col_mic = st.columns([0.5, 0.5])
 
+with col_file:
+    uploaded_file = st.file_uploader(
+        "📁 మీ ఫైల్‌ను అప్‌లోడ్ చేయండి (.docx, .pdf, .txt):", 
+        type=["docx", "pdf", "txt"],
+        help="వర్డ్ ఫైల్, పీడీఎఫ్ లేదా టెక్స్ట్ ఫైల్‌ని అప్‌లోడ్ చేయవచ్చు."
+    )
+
+with col_mic:
+    st.markdown("**🎙️ మైక్రోఫోన్ ద్వారా మాట్లాడండి (Live Voice Typing):**")
+    mic_lang = st.selectbox(
+        "మాట్లాడే భాషను ఎంచుకోండి:",
+        options=["తెలుగు (Telugu)", "హిందీ (Hindi)", "ఇంగ్లీష్ (English)"],
+        key="mic_lang_choice"
+    )
+    
+    mic_code_map = {
+        "తెలుగు (Telugu)": "te-IN",
+        "హిందీ (Hindi)": "hi-IN",
+        "ఇంగ్లీష్ (English)": "en-IN"
+    }
+    
+    # 🎙️ Live Speech to Text Button Component
+    spoken_text = speech_to_text(
+        start_prompt="🎙️ మాట్లాడటం ప్రారంభించండి (Start)",
+        stop_prompt="⏹️ ఆపండి (Stop)",
+        language=mic_code_map[mic_lang],
+        use_container_width=True,
+        key='speech_recorder'
+    )
+    
+    if spoken_text:
+        st.session_state.voice_input_text += " " + spoken_text
+        st.success(f"✅ రికార్డ్ అయింది: {spoken_text}")
+
+
+# టెక్స్ట్ ప్రైమరీ సోర్స్ కలెక్షన్
 file_extracted_text = ""
 if uploaded_file is not None:
     try:
         file_extracted_text = extract_text_from_file(uploaded_file)
-        st.success(f"✅ '{uploaded_file.name}' ఫైల్ నుండి టెక్స్ట్ విజయవంతంగా లోడ్ అయింది!")
+        st.success(f"✅ '{uploaded_file.name}' ఫైల్ నుండి టెక్స్ట్ లోడ్ అయింది!")
     except Exception as fe:
-        st.error(f"ఫైల్ చదవడంలో లోపం వచ్చింది: {fe}")
+        st.error(f"ఫైల్ చదవడంలో లోపం: {fe}")
+
+# మైక్ ద్వారా వచ్చిన టెక్స్ట్ లేదా ఫైల్ టెక్స్ట్ ని డీఫాల్ట్‌గా ఉంచడం
+initial_text_val = file_extracted_text if file_extracted_text else st.session_state.voice_input_text
 
 user_text = st.text_area(
-    "ఆడియోగా మార్చాలనుకుంటున్న టెక్స్ట్ (ఫైల్ అప్‌లోడ్ చేయవచ్చు లేదా నేరుగా ఇక్కడ పేస్ట్ చేయవచ్చు):", 
-    value=file_extracted_text,
+    "ఆడియోగా మార్చాలనుకుంటున్న టెక్స్ట్ (ఫైల్ / మైక్ ద్వారా లేదా నేరుగా టైప్ చేయవచ్చు):", 
+    value=initial_text_val,
     height=150, 
-    placeholder="బాబా చెప్పారు... / बाबा ने कहा... / Baba said..."
+    placeholder="బాబా చెప్పారు... / మీరు మైక్ లో మాట్లాడితే ఇక్కడ ప్రింట్ అవుతుంది..."
 )
 
 # గూగుల్ ట్రాన్స్‌లేటర్ విజెట్
@@ -241,7 +280,7 @@ if user_text.strip():
     col_tr1, col_tr2 = st.columns([0.7, 0.3])
     with col_tr1:
         target_trans_lang = st.selectbox(
-            "ఏ భాషలోకి ఉచితంగా మార్చాలనుకుంటున్నారు? (Select Target Language):",
+            "ఏ భాషలోకి ఉచితంగా మార్చాలనుకుంటున్నారు?:",
             options=["తెలుగు (Telugu)", "హిందీ (Hindi)", "ఇంగ్లీష్ (English)"],
             key="trans_target"
         )
@@ -249,7 +288,7 @@ if user_text.strip():
         st.write("")
         st.write("")
         if st.button("🔄 టెక్స్ట్‌ని అనువదించు (Translate)", use_container_width=True):
-            with st.spinner("గూగుల్ ట్రాన్స్‌లేటర్ సహాయంతో ఉచితంగా మార్చబడుతోంది..."):
+            with st.spinner("గూగుల్ ట్రాన్స్‌లేటర్ ద్వారా ఉచితంగా మార్చబడుతోంది..."):
                 lang_code_map = {
                     "తెలుగు (Telugu)": "te",
                     "హిందీ (Hindi)": "hi",
@@ -266,10 +305,9 @@ if user_text.strip():
             value=st.session_state["translated_text_val"], 
             height=120
         )
-        st.caption("💡 గమనిక: ఈ అనువాదమైన టెక్స్ట్‌ను కాపీ చేసి పైన ఉన్న ప్రధాన బాక్స్‌లో పేస్ట్ చేయడం ద్వారా ఆ భాషా స్వరంలో ఆడియో తయారు చేయవచ్చు.")
 
     w_count, est_mins = get_text_analytics(user_text)
-    st.info(f"📊 **మొత్తం పదాలు:** {w_count:,} | ⏱️ **అంచనా ఆడియో సమయం:** ~{est_mins} నిమిషాలు (ప్రశాంతమైన వేగం వద్ద)")
+    st.info(f"📊 **మొత్తం పదాలు:** {w_count:,} | ⏱️ **అంచనా ఆడియో సమయం:** ~{est_mins} నిమిషాలు")
 
 
 # ==========================================
@@ -319,16 +357,14 @@ with col_pause:
         min_value=0.3,
         max_value=2.0,
         value=0.6,
-        step=0.1,
-        help="వాక్యానికి వాక్యానికి మధ్య ప్రశాంతమైన నిశ్శబ్దం (Silence)."
+        step=0.1
     )
 
 with col_pitch:
     pitch_custom = st.select_slider(
         "🎚️ వాయిస్ గంభీరత (Pitch Base):",
         options=["సాధారణ (Normal)", "గంభీరం (Deep Base)", "అత్యంత గంభీరం (Heavy Base)"],
-        value="సాధారణ (Normal)",
-        help="స్వరం ఎంత బేస్/గంభీరంగా ఉండాలో ఎంచుకోండి."
+        value="సాధారణ (Normal)"
     )
 
 with col_bgm_box:
@@ -345,7 +381,6 @@ if convert_btn:
     if user_text.strip():
         with st.spinner("టెక్స్ట్‌ని ప్రాసెస్ చేసి, BGM మరియు కంట్రోల్స్‌తో ఆడియో క్రియేట్ చేస్తోంది..."):
             try:
-                # స్పెషల్ సింబల్స్ క్లీన్ చేయడం
                 clean_txt = re.sub(r'[*#_~`]', '', user_text)
                 
                 voice_map = {
@@ -360,7 +395,6 @@ if convert_btn:
 
                 rate_str = f"{int((audio_speed - 1.0) * 100):+d}%"
                 
-                # 🛠️ పిచ్‌ని సురక్షితమైన పర్సంటేజ్ (%) రూపాంలోకి మార్చడం
                 pitch_val_map = {
                     "సాధారణ (Normal)": "+0%",
                     "గంభీరం (Deep Base)": "-8%",
@@ -380,7 +414,6 @@ if convert_btn:
                             chunk_sound = AudioSegment.from_file(io.BytesIO(raw_audio), format="mp3")
                             speech_sound += chunk_sound + silence_pause
                     except Exception as chunk_err:
-                        st.warning(f"చిన్న ముక్కను ప్రాసెస్ చేయడంలో లోపం వచ్చింది (స్కిప్ చేయబడింది): {chunk_err}")
                         continue
 
                 if len(speech_sound) == 0:
@@ -428,4 +461,4 @@ if convert_btn:
             except Exception as e:
                 st.error(f"ఆడియో తయారీలో లోపం: {e}")
     else:
-        st.warning("దయచేసి టెక్స్ట్ ఎంటర్ చేయండి లేదా ఫైల్ అప్‌లోడ్ చేయండి.")
+        st.warning("దయచేసి టెక్స్ట్ ఎంటర్ చేయండి లేదా మాట్లాడండి.")
