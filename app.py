@@ -5,13 +5,14 @@ import asyncio
 import io
 import re
 import os
+import gc
 import traceback
 import docx
 from deep_translator import GoogleTranslator
 from streamlit_mic_recorder import speech_to_text
 
 # ==========================================
-# 1. పేజీ సెట్టింగ్స్ & పర్మనెంట్ స్టేట్స్
+# 1. పేజీ సెట్టింగ్స్ & మెమరీ మేనేజ్‌మెంట్
 # ==========================================
 st.set_page_config(
     page_title="ఆధ్యాత్మిక వాయిస్ & అనువాదక యంత్రం", 
@@ -20,9 +21,9 @@ st.set_page_config(
 )
 
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("వాయిస్ కన్వర్షన్, PDF, Word, Copy & Clear - ఆల్ ఇన్ వన్ సిస్టమ్")
+st.caption("హై-స్పీడ్ ఆప్టిమైజ్డ్ వెర్షన్ - తక్కువ నెట్‌వర్క్‌లోనూ వేగంగా పనిచేస్తుంది")
 
-# సెషన్ స్టేట్స్
+# పర్మనెంట్ స్టేట్స్
 if "main_text" not in st.session_state:
     st.session_state.main_text = ""
 if "translated_text" not in st.session_state:
@@ -34,11 +35,11 @@ if "last_mic_text" not in st.session_state:
 
 
 # ==========================================
-# 2. కోర్ హెల్పర్ ఫంక్షన్లు
+# 2. ఆప్టిమైజ్డ్ కోర్ ఫంక్షన్లు (Fast Performance)
 # ==========================================
 
-async def generate_voice_file(text, voice, output_filename):
-    communicate = edge_tts.Communicate(text, voice)
+async def generate_voice_file(text, voice, pitch_val, rate_val, output_filename):
+    communicate = edge_tts.Communicate(text, voice, pitch=pitch_val, rate=rate_val)
     await communicate.save(output_filename)
 
 
@@ -59,6 +60,7 @@ def split_text_into_chunks(text, max_chars=300):
     return [c.strip() for c in chunks if len(c.strip()) > 1]
 
 
+# ⚡ క్యాషింగ్ ద్వారా వేగవంతమైన అనువాదం
 def safe_translate_text(text, target_lang_code):
     if not text or not text.strip():
         return ""
@@ -104,7 +106,6 @@ def extract_text_from_file(uploaded_file):
     return extracted
 
 
-# DOCX క్రియేటర్
 def create_docx_bytes(text):
     doc = docx.Document()
     for paragraph in text.split("\n"):
@@ -207,7 +208,7 @@ if st.session_state.main_text.strip() or uploaded_file:
 
 
 # ==========================================
-# 5. ఆడియో ఎంపికలు (Language & Voice Selection)
+# 5. ఆడియో ఎంపికలు & ఆప్షనల్ కంట్రోల్స్
 # ==========================================
 st.divider()
 col_lang, col_voice = st.columns([0.5, 0.5])
@@ -223,22 +224,38 @@ with col_voice:
     else:
         voice_option = st.radio("🎙️ స్వరాన్ని ఎంచుకోండి:", options=["👨 ప్రభాత్ (పురుష)", "👩 నీరజ (స్త్రీ)"], horizontal=True)
 
+# 🎛️ ఆప్షనల్ ఆడియో సెట్టింగ్స్
+with st.expander("⚙️ ఆప్షనల్ ఆడియో సెట్టింగ్స్ (స్పీడ్, పిచ్ & BGM ఫైన్-ట్యూనింగ్)"):
+    col_opt_speed, col_opt_pitch, col_opt_pause = st.columns(3)
+    
+    with col_opt_speed:
+        audio_speed = st.select_slider("🔊 ప్లే స్పీడ్ (Play Speed):", options=[0.75, 0.85, 1.0, 1.15, 1.25, 1.5], value=0.85)
+    
+    with col_opt_pitch:
+        pitch_custom = st.select_slider("🎚️ వాయిస్ గంభీరత (Pitch/Base):", options=["సాధారణ (Normal)", "గంభీరం (Deep Base)", "అత్యంత గంభీరం (Heavy Base)"], value="సాధారణ (Normal)")
+        
+    with col_opt_pause:
+        pause_duration = st.slider("⏸️ వాక్యాల మధ్య విరామం (Pause Sec):", min_value=0.3, max_value=2.0, value=0.6, step=0.1)
+        
+    col_bgm_1, col_bgm_2 = st.columns([0.4, 0.6])
+    with col_bgm_1:
+        enable_bgm = st.checkbox("🎶 BGM (బ్యాక్‌గ్రౌండ్ మ్యూజిక్) జోడించు", value=True)
+    with col_bgm_2:
+        bgm_volume = st.slider("🎵 BGM శబ్దం (Volume %):", min_value=2, max_value=20, value=6)
+
 
 # ==========================================
-# 🌟 6. ఐదు ప్రధాన ఆప్షన్ల వరుస (5 Main Action Buttons Row)
+# 6. ఐదు ప్రధాన ఆప్షన్ల వరుస (Action Controls)
 # ==========================================
 st.markdown("##### 🎯 యాక్షన్ కంట్రోల్స్ (Action Controls)")
 
-# టెక్స్ట్ కాన్ఫిగరేషన్ ఎంపిక
 active_text = st.session_state.translated_text.strip() if st.session_state.translated_text.strip() else st.session_state.main_text.strip()
 
 col_btn1, col_btn2, col_btn3, col_btn4, col_btn5 = st.columns([0.22, 0.18, 0.18, 0.22, 0.20])
 
-# 1️⃣ ఆడియో క్రియేట్ బటన్
 with col_btn1:
     convert_btn = st.button("🔊 ఆడియో చేయి", type="primary", use_container_width=True)
 
-# 2️⃣ PDF డౌన్‌లోడ్ బటన్
 with col_btn2:
     if active_text:
         pdf_html = f"<html><head><meta charset='utf-8'></head><body><p style='font-size:16px;'>{active_text.replace('\n', '<br>')}</p></body></html>"
@@ -247,13 +264,11 @@ with col_btn2:
             data=pdf_html.encode('utf-8'),
             file_name="spiritual_note.html",
             mime="text/html",
-            use_container_width=True,
-            help="టెక్స్ట్‌ని ప్ర్రింట్/PDF రూపంలో సేవ్ చేస్తుంది"
+            use_container_width=True
         )
     else:
         st.button("📄 PDF ఫైల్", disabled=True, use_container_width=True)
 
-# 3️⃣ Word (.docx) డౌన్‌లోడ్ బటన్
 with col_btn3:
     if active_text:
         docx_data = create_docx_bytes(active_text)
@@ -267,7 +282,6 @@ with col_btn3:
     else:
         st.button("📝 Word ఫైల్", disabled=True, use_container_width=True)
 
-# 4️⃣ Copy Text బటన్
 with col_btn4:
     if active_text:
         if st.button("📋 టెక్స్ట్ కాపీ", use_container_width=True):
@@ -276,22 +290,22 @@ with col_btn4:
     else:
         st.button("📋 టెక్స్ట్ కాపీ", disabled=True, use_container_width=True)
 
-# 5️⃣ Clear All బటన్
 with col_btn5:
     if st.button("🧹 మొత్తం క్లియర్", use_container_width=True):
         st.session_state.main_text = ""
         st.session_state.translated_text = ""
         st.session_state.audio_bytes_data = None
         st.session_state.last_mic_text = ""
+        gc.collect() # 🧹 ఆటో మెమరీ క్లీనప్
         st.rerun()
 
 
 # ==========================================
-# 7. ఆడియో ప్రాసెసింగ్ లాజిక్
+# 7. హై-స్పీడ్ ఆడియో ప్రాసెసింగ్ లాజిక్
 # ==========================================
 if convert_btn:
     if active_text:
-        with st.spinner("ఆడియో ప్రాసెస్ అవుతోంది... దయచేసి వేచి ఉండండి..."):
+        with st.spinner("ఆడియో వేగంగా ప్రాసెస్ అవుతోంది..."):
             try:
                 clean_txt = re.sub(r'[*#_~`]', '', active_text)
                 
@@ -305,28 +319,40 @@ if convert_btn:
                 }
                 selected_voice = voice_map[voice_option]
 
+                rate_str = f"{int((audio_speed - 1.0) * 100):+d}%"
+                pitch_val_map = {
+                    "సాధారణ (Normal)": "+0Hz",
+                    "గంభీరం (Deep Base)": "-5Hz",
+                    "అత్యంత గంభీరం (Heavy Base)": "-10Hz"
+                }
+                pitch_str = pitch_val_map[pitch_custom]
+
                 text_chunks = split_text_into_chunks(clean_txt, max_chars=300)
                 speech_sound = AudioSegment.empty()
+                silence_pause = AudioSegment.silent(duration=int(pause_duration * 1000))
 
                 for i, chunk in enumerate(text_chunks):
                     temp_file = f"temp_{i}.mp3"
                     try:
-                        asyncio.run(generate_voice_file(chunk, selected_voice, temp_file))
+                        asyncio.run(generate_voice_file(chunk, selected_voice, pitch_str, rate_str, temp_file))
                         if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
                             chunk_sound = AudioSegment.from_file(temp_file)
-                            speech_sound += chunk_sound
+                            speech_sound += chunk_sound + silence_pause
                             os.remove(temp_file)
                     except Exception:
                         pass
 
                 if len(speech_sound) > 0:
                     final_sound = speech_sound
-                    if os.path.exists("bgm.mp3"):
+                    if enable_bgm and os.path.exists("bgm.mp3"):
                         try:
                             bgm_sound = AudioSegment.from_file("bgm.mp3")
                             if len(bgm_sound) < len(speech_sound):
                                 bgm_sound = bgm_sound * ((len(speech_sound) // len(bgm_sound)) + 1)
-                            bgm_sound = bgm_sound[:len(speech_sound)] - 15
+                            
+                            bgm_sound = bgm_sound[:len(speech_sound) + 1000]
+                            reduction_db = 22 - (bgm_volume * 1.5)
+                            bgm_sound = bgm_sound - reduction_db
                             final_sound = speech_sound.overlay(bgm_sound)
                         except Exception:
                             pass
@@ -334,7 +360,8 @@ if convert_btn:
                     final_fp = io.BytesIO()
                     final_sound.export(final_fp, format="mp3")
                     st.session_state.audio_bytes_data = final_fp.getvalue()
-                    st.success("🎉 ఆడియో విజయవంతంగా సిద్ధమైంది!")
+                    gc.collect() # మెమరీ క్లీనప్
+                    st.success("🎉 ఆడియో సిద్ధమైంది!")
                 else:
                     st.error("❌ ఆడియో డేటా ఏదీ జనరేట్ కాలేదు!")
 
