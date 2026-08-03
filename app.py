@@ -23,15 +23,17 @@ st.set_page_config(
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
 st.caption("అనువాదం, ఫైల్ ఇమేజ్ ప్రొటెక్షన్, లైవ్ మైక్రోఫోన్ & వాయిస్ కన్వర్టర్")
 
-# Session State
-if "voice_input_text" not in st.session_state:
-    st.session_state.voice_input_text = ""
+# Session State ఇనిషియలైజేషన్
+if "user_text_val" not in st.session_state:
+    st.session_state.user_text_val = ""
 if "translated_text_val" not in st.session_state:
     st.session_state.translated_text_val = ""
+if "last_processed_speech" not in st.session_state:
+    st.session_state.last_processed_speech = ""
 
 
 # ==========================================
-# 2. హెల్పర్ ఫంక్షన్స్ (Robust Translation & TTS)
+# 2. హెల్పర్ ఫంక్షన్స్
 # ==========================================
 
 async def generate_voice_file(text, voice, output_filename):
@@ -56,7 +58,6 @@ def split_text_into_chunks(text, max_chars=300):
     return [c.strip() for c in chunks if len(c.strip()) > 1]
 
 
-# 🛠️ Safe Translation Helper Logic (NoneType Error Fix)
 def safe_translate_text(text, target_lang_code):
     if not text or not text.strip():
         return ""
@@ -106,7 +107,6 @@ def extract_text_from_file(uploaded_file):
     return extracted
 
 
-# 🖼️ వర్డ్ ఫైల్‌లోని ఇమేజెస్/ఫోటోస్ అలాగే ఉంచి కేవలం టెక్స్ట్‌ని మాత్రమే అనువదించే ఫంక్షన్
 def translate_docx_file(uploaded_file, target_lang_code):
     doc = docx.Document(uploaded_file)
     translator = GoogleTranslator(source='auto', target=target_lang_code)
@@ -136,31 +136,47 @@ with col_file:
     uploaded_file = st.file_uploader("📁 మీ ఫైల్‌ను అప్‌లోడ్ చేయండి (.docx, .pdf, .txt):", type=["docx", "pdf", "txt"])
 
 with col_mic:
-    st.markdown("**🎙️ మైక్రోఫోన్ ద్వారా మాట్లాడండి:**")
+    st.markdown("**🎙️ మైక్రోఫోన్ ద్వారా మాట్లాడండి (Live Voice Typing):**")
     mic_lang = st.selectbox("మాట్లాడే భాష:", options=["తెలుగు (Telugu)", "హిందీ (Hindi)", "ఇంగ్లీష్ (English)"])
     mic_code_map = {"తెలుగు (Telugu)": "te-IN", "హిందీ (Hindi)": "hi-IN", "ఇంగ్లీష్ (English)": "en-IN"}
     
+    # 🎙️ రికార్డర్ కాంపోనెంట్
     spoken_text = speech_to_text(
-        start_prompt="🎙️ మాట్లాడటం ప్రారంభించండి",
-        stop_prompt="⏹️ ఆపండి",
+        start_prompt="🎙️ మాట్లాడటం ప్రారంభించండి (Start)",
+        stop_prompt="⏹️ ఆపండి (Stop)",
         language=mic_code_map[mic_lang],
         use_container_width=True,
         key='speech_recorder'
     )
-    if spoken_text:
-        st.session_state.voice_input_text += " " + spoken_text
+    
+    # 🛠️ డూప్లికేట్ కాపీ లూప్ జరగకుండా ఆపే లాజిక్
+    if spoken_text and spoken_text != st.session_state.last_processed_speech:
+        st.session_state.user_text_val += " " + spoken_text
+        st.session_state.last_processed_speech = spoken_text
+        st.success(f"✅ రికార్డ్ అయింది: {spoken_text}")
 
-file_extracted_text = ""
+
+# ఫైల్ అప్‌లోడ్ లాజిక్
 if uploaded_file is not None:
     try:
-        file_extracted_text = extract_text_from_file(uploaded_file)
-        st.success(f"✅ '{uploaded_file.name}' ఫైల్ విజయవంతంగా లోడ్ అయింది!")
+        f_text = extract_text_from_file(uploaded_file)
+        if f_text:
+            st.session_state.user_text_val = f_text
+            st.success(f"✅ '{uploaded_file.name}' ఫైల్ నుండి టెక్స్ట్ లోడ్ అయింది!")
     except Exception as fe:
         st.error(f"ఫైల్ చదవడంలో లోపం: {fe}")
 
-initial_text_val = file_extracted_text if file_extracted_text else st.session_state.voice_input_text
+# ప్రైమరీ టెక్స్ట్ బాక్స్
+user_text = st.text_area(
+    "ఆడియోగా మార్చాలనుకుంటున్న టెక్స్ట్:", 
+    value=st.session_state.user_text_val, 
+    height=140,
+    key="main_text_area"
+)
 
-user_text = st.text_area("ఆడియోగా మార్చాలనుకుంటున్న టెక్స్ట్:", value=initial_text_val, height=140)
+# టెక్స్ట్ ఏరియాలో యూజర్ నేరుగా ఎడిట్ చేస్తే దాన్ని సేవ్ చేయడం
+if user_text != st.session_state.user_text_val:
+    st.session_state.user_text_val = user_text
 
 
 # ==========================================
@@ -187,11 +203,9 @@ if user_text.strip() or uploaded_file:
             except Exception as tr_err:
                 st.error(f"అనువాదంలో లోపం: {tr_err}")
 
-    # టెక్స్ట్ రిజల్ట్
     if st.session_state["translated_text_val"]:
         st.text_area("అనువాదం అయిన టెక్స్ట్:", value=st.session_state["translated_text_val"], height=120)
 
-    # 🖼️ వర్డ్ ఫైల్ డౌన్‌లోడ్
     if uploaded_file and uploaded_file.name.endswith(".docx"):
         if st.button("📥 ఫోటోలు/సింబల్స్‌తో సహా అనువాద వర్డ్ ఫైల్ (.docx) డౌన్‌లోడ్ చేయి"):
             with st.spinner("ఫైల్ డిజైన్ మరియు ఫోటోలు పాడవకుండా అనువదిస్తోంది..."):
