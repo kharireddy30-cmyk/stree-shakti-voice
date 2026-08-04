@@ -8,26 +8,23 @@ import os
 import gc
 import traceback
 import docx
-from deep_translator import GoogleTranslator
 from streamlit_mic_recorder import speech_to_text
 
 # ==========================================
 # 1. పేజీ సెట్టింగ్స్ & పర్మనెంట్ స్టేట్స్
 # ==========================================
 st.set_page_config(
-    page_title="ఆధ్యాత్మిక వాయిస్ & అనువాదక యంత్రం", 
+    page_title="ఆధ్యాత్మిక వాయిస్ యంత్రం", 
     layout="wide", 
     page_icon="🕉️"
 )
 
-st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("హై-స్పీడ్ ఆప్టిమైజ్డ్ వెర్షన్ - 100% పరిపూర్ణ అనువాద వ్యవస్థ")
+st.header("🔱 ఆధ్యాత్మిక వాయిస్ సిస్టమ్")
+st.caption("వాయిస్ కన్వర్షన్, ఫైల్ సపోర్ట్, లైవ్ మైక్రోఫోన్, PDF, Word & Copy - 100% స్టేబుల్ వెర్షన్")
 
 # సెషన్ స్టేట్స్
 if "main_text" not in st.session_state:
     st.session_state.main_text = ""
-if "translated_text" not in st.session_state:
-    st.session_state.translated_text = ""
 if "audio_bytes_data" not in st.session_state:
     st.session_state.audio_bytes_data = None
 if "last_mic_text" not in st.session_state:
@@ -35,7 +32,7 @@ if "last_mic_text" not in st.session_state:
 
 
 # ==========================================
-# 2. కోర్ హెల్పర్ ఫంక్షన్లు (Ultra-Pure Translator Fix)
+# 2. కోర్ హెల్పర్ ఫంక్షన్లు (Ultra-Reliable)
 # ==========================================
 
 async def generate_voice_file(text, voice, pitch_val, rate_val, output_filename):
@@ -58,46 +55,6 @@ def split_text_into_chunks(text, max_chars=300):
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
     return [c.strip() for c in chunks if len(c.strip()) > 0]
-
-
-# 🛠️ 100% ప్యూర్ అనువాద లాజిక్ (ఏ లైన్ మిస్ కాకుండా, భాషలు మిక్స్ కాకుండా)
-def safe_translate_text(text, target_lang_code):
-    if not text or not text.strip():
-        return ""
-    
-    # ప్రతీ పారాగ్రాఫ్ / లైన్‌ని ప్రశాంతంగా విడదీయడం
-    lines = text.split("\n")
-    translated_lines = []
-    translator = GoogleTranslator(source='auto', target=target_lang_code)
-
-    for line in lines:
-        clean_line = line.strip()
-        if clean_line:
-            # లైన్ చాలా పెద్దదిగా ఉంటే ప్రశాంతమైన వాక్యాలుగా కట్ చేయడం
-            if len(clean_line) > 500:
-                sentences = re.split(r'(?<=[.!?।])\s+', clean_line)
-                sub_trans = []
-                for s in sentences:
-                    if s.strip():
-                        try:
-                            t_s = translator.translate(s.strip())
-                            sub_trans.append(t_s if (t_s and isinstance(t_s, str)) else s)
-                        except Exception:
-                            sub_trans.append(s)
-                translated_lines.append(" ".join(sub_trans))
-            else:
-                try:
-                    t_line = translator.translate(clean_line)
-                    if t_line and isinstance(t_line, str):
-                        translated_lines.append(t_line)
-                    else:
-                        translated_lines.append(clean_line)
-                except Exception:
-                    translated_lines.append(clean_line)
-        else:
-            translated_lines.append("")
-
-    return "\n".join(translated_lines)
 
 
 def extract_text_from_file(uploaded_file):
@@ -171,7 +128,8 @@ with col_mic:
 user_input_text = st.text_area(
     "ఆడియో/ఫైల్స్‌గా మార్చాలనుకుంటున్న టెక్స్ట్:", 
     value=st.session_state.main_text, 
-    height=150
+    height=180,
+    placeholder="ఇక్కడ టెక్స్ట్ పేస్ట్ చేయండి లేదా పైన ఉన్న మైక్రోఫోన్ / ఫైల్ అప్‌లోడ్ ఉపయోగించండి..."
 )
 
 if user_input_text != st.session_state.main_text:
@@ -179,40 +137,7 @@ if user_input_text != st.session_state.main_text:
 
 
 # ==========================================
-# 4. అనువాద విభాగం (100% Pure Language Translator)
-# ==========================================
-if st.session_state.main_text.strip() or uploaded_file:
-    st.markdown("##### 🌐 భాషా అనువాదం (Language Translator)")
-    col_tr1, col_tr2 = st.columns([0.7, 0.3])
-    
-    with col_tr1:
-        target_trans_lang = st.selectbox("ఏ భాషలోకి మార్చాలి?:", options=["తెలుగు (Telugu)", "హిందీ (Hindi)", "ఇంగ్లీష్ (English)"])
-        lang_code_map = {"తెలుగు (Telugu)": "te", "హిందీ (Hindi)": "hi", "ఇంగ్లీష్ (English)": "en"}
-        t_code = lang_code_map[target_trans_lang]
-
-    with col_tr2:
-        st.write("")
-        st.write("")
-        if st.button("🔄 టెక్స్ట్‌ని అనువదించు (Translate)", use_container_width=True):
-            try:
-                with st.spinner("మొత్తం టెక్స్ట్ పూర్తి స్థాయిలో అనువాదం జరుగుతోంది..."):
-                    t_res = safe_translate_text(st.session_state.main_text, t_code)
-                    st.session_state.translated_text = t_res
-                    st.success("✅ 100% పరిపూర్ణంగా అనువాదం పూర్తయింది!")
-            except Exception as tr_err:
-                st.error(f"అనువాదంలో లోపం: {tr_err}")
-
-    if st.session_state.translated_text:
-        st.text_area("అనువాదం అయిన టెక్స్ట్ (Translated Text):", value=st.session_state.translated_text, height=140)
-        
-        if st.button("🎯 ఈ అనువాదాన్ని ప్రధాన బాక్స్‌లోకి మార్చు (Use Translation)"):
-            st.session_state.main_text = st.session_state.translated_text
-            st.success("✅ అనువాదమైన టెక్స్ట్ ప్రధాన బాక్స్‌లోకి మార్చబడింది!")
-            st.rerun()
-
-
-# ==========================================
-# 5. ఆడియో ఎంపికలు & ఆప్షనల్ కంట్రోల్స్
+# 4. ఆడియో ఎంపికలు & ఆప్షనల్ కంట్రోల్స్
 # ==========================================
 st.divider()
 col_lang, col_voice = st.columns([0.5, 0.5])
@@ -249,11 +174,11 @@ with st.expander("⚙️ ఆప్షనల్ ఆడియో సెట్ట�
 
 
 # ==========================================
-# 6. ఐదు ప్రధాన ఆప్షన్ల వరుస (Action Controls)
+# 5. ఐదు ప్రధాన ఆప్షన్ల వరుస (Action Controls)
 # ==========================================
 st.markdown("##### 🎯 యాక్షన్ కంట్రోల్స్ (Action Controls)")
 
-active_text = st.session_state.translated_text.strip() if st.session_state.translated_text.strip() else st.session_state.main_text.strip()
+active_text = st.session_state.main_text.strip()
 
 col_btn1, col_btn2, col_btn3, col_btn4, col_btn5 = st.columns([0.22, 0.18, 0.18, 0.22, 0.20])
 
@@ -297,7 +222,6 @@ with col_btn4:
 with col_btn5:
     if st.button("🧹 మొత్తం క్లియర్", use_container_width=True):
         st.session_state.main_text = ""
-        st.session_state.translated_text = ""
         st.session_state.audio_bytes_data = None
         st.session_state.last_mic_text = ""
         gc.collect()
@@ -305,11 +229,11 @@ with col_btn5:
 
 
 # ==========================================
-# 7. ఆడియో ప్రాసెసింగ్ లాజిక్
+# 6. హై-స్పీడ్ ఆడియో ప్రాసెసింగ్ లాజిక్
 # ==========================================
 if convert_btn:
     if active_text:
-        with st.spinner("ఆడియో వేగంగా ప్రాసెస్ అవుతోంది..."):
+        with st.spinner("ఆడియో వేగంగా ప్రాసెస్ అవుతోంది... దయచేసి వేచి ఉండండి..."):
             try:
                 clean_txt = re.sub(r'[*#_~`]', '', active_text)
                 
@@ -365,7 +289,7 @@ if convert_btn:
                     final_sound.export(final_fp, format="mp3")
                     st.session_state.audio_bytes_data = final_fp.getvalue()
                     gc.collect()
-                    st.success("🎉 ఆడియో సిద్ధమైంది!")
+                    st.success("🎉 ఆడియో విజయవంతంగా సిద్ధమైంది!")
                 else:
                     st.error("❌ ఆడియో డేటా ఏదీ జనరేట్ కాలేదు!")
 
