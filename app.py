@@ -12,7 +12,7 @@ from deep_translator import GoogleTranslator
 from streamlit_mic_recorder import speech_to_text
 
 # ==========================================
-# 1. పేజీ సెట్టింగ్స్ & మెమరీ మేనేజ్‌మెంట్
+# 1. పేజీ సెట్టింగ్స్ & పర్మనెంట్ స్టేట్స్
 # ==========================================
 st.set_page_config(
     page_title="ఆధ్యాత్మిక వాయిస్ & అనువాదక యంత్రం", 
@@ -21,9 +21,9 @@ st.set_page_config(
 )
 
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ & భాషా అనువాద వ్యవస్థ")
-st.caption("హై-స్పీడ్ ఆప్టిమైజ్డ్ వెర్షన్ - తక్కువ నెట్‌వర్క్‌లోనూ వేగంగా పనిచేస్తుంది")
+st.caption("హై-స్పీడ్ ఆప్టిమైజ్డ్ వెర్షన్ - స్ట్రాంగ్ ట్రాన్స్‌లేటర్ ఫిక్స్")
 
-# పర్మనెంట్ స్టేట్స్
+# సెషన్ స్టేట్స్
 if "main_text" not in st.session_state:
     st.session_state.main_text = ""
 if "translated_text" not in st.session_state:
@@ -35,7 +35,7 @@ if "last_mic_text" not in st.session_state:
 
 
 # ==========================================
-# 2. ఆప్టిమైజ్డ్ కోర్ ఫంక్షన్లు (Fast Performance)
+# 2. కోర్ హెల్పర్ ఫంక్షన్లు (Ultra-Robust)
 # ==========================================
 
 async def generate_voice_file(text, voice, pitch_val, rate_val, output_filename):
@@ -57,43 +57,42 @@ def split_text_into_chunks(text, max_chars=300):
             current_chunk = sentence + " "
     if current_chunk.strip():
         chunks.append(current_chunk.strip())
-    return [c.strip() for c in chunks if len(c.strip()) > 1]
+    return [c.strip() for c in chunks if len(c.strip()) > 0]
 
 
-# ⚡ క్యాషింగ్ ద్వారా వేగవంతమైన అనువాదం
+# 🛠️ 10 నుండి 5000+ క్యారెక్టర్ల వరకు "Server 500 Error" రాకుండా ఉండే బుల్లెట్ ప్రూఫ్ ట్రాన్స్‌లేషన్
 def safe_translate_text(text, target_lang_code):
     if not text or not text.strip():
         return ""
     
-    paragraphs = text.split("\n")
-    translated_paras = []
+    clean_input = text.strip()
+    
+    # 1. చిన్న టెక్స్ట్ (అతి తక్కువ లెటర్స్ ఉంటే direct గా చేయడం)
+    if len(clean_input) <= 400:
+        try:
+            res = GoogleTranslator(source='auto', target=target_lang_code).translate(clean_input)
+            if res and isinstance(res, str):
+                return res
+        except Exception:
+            pass
+
+    # 2. పెద్ద టెక్స్ట్ లేదా 500 ఎర్రర్ ఫాల్‌బ్యాక్ (చిన్న చంకులుగా విభజించడం)
+    chunks = split_text_into_chunks(clean_input, max_chars=400)
+    translated_chunks = []
     translator = GoogleTranslator(source='auto', target=target_lang_code)
 
-    for p in paragraphs:
-        p_clean = p.strip()
-        if p_clean:
+    for chunk in chunks:
+        if chunk.strip():
             try:
-                if len(p_clean) > 1200:
-                    sub_chunks = split_text_into_chunks(p_clean, max_chars=1000)
-                    sub_trans = []
-                    for sc in sub_chunks:
-                        if sc.strip():
-                            res = translator.translate(sc)
-                            if res and isinstance(res, str):
-                                sub_trans.append(res)
-                    translated_paras.append(" ".join(sub_trans))
+                t_res = translator.translate(chunk)
+                if t_res and isinstance(t_res, str) and "Error 500" not in t_res:
+                    translated_chunks.append(t_res)
                 else:
-                    res = translator.translate(p_clean)
-                    if res and isinstance(res, str):
-                        translated_paras.append(res)
-                    else:
-                        translated_paras.append(p_clean)
+                    translated_chunks.append(chunk) # ఫెయిల్ అయితే ఒరిజినల్ టెక్స్ట్ నిలుస్తుంది
             except Exception:
-                translated_paras.append(p_clean)
-        else:
-            translated_paras.append("")
+                translated_chunks.append(chunk)
 
-    return "\n".join(translated_paras)
+    return " ".join(translated_chunks)
 
 
 def extract_text_from_file(uploaded_file):
@@ -175,7 +174,7 @@ if user_input_text != st.session_state.main_text:
 
 
 # ==========================================
-# 4. అనువాద విభాగం (Translator Section)
+# 4. అనువాద విభాగం (Translator Section - Updated)
 # ==========================================
 if st.session_state.main_text.strip() or uploaded_file:
     st.markdown("##### 🌐 భాషా అనువాదం (Language Translator)")
@@ -296,7 +295,7 @@ with col_btn5:
         st.session_state.translated_text = ""
         st.session_state.audio_bytes_data = None
         st.session_state.last_mic_text = ""
-        gc.collect() # 🧹 ఆటో మెమరీ క్లీనప్
+        gc.collect()
         st.rerun()
 
 
@@ -360,7 +359,7 @@ if convert_btn:
                     final_fp = io.BytesIO()
                     final_sound.export(final_fp, format="mp3")
                     st.session_state.audio_bytes_data = final_fp.getvalue()
-                    gc.collect() # మెమరీ క్లీనప్
+                    gc.collect()
                     st.success("🎉 ఆడియో సిద్ధమైంది!")
                 else:
                     st.error("❌ ఆడియో డేటా ఏదీ జనరేట్ కాలేదు!")
