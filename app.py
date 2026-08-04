@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 st.header("🔱 ఆధ్యాత్మిక వాయిస్ సిస్టమ్")
-st.caption("వాయిస్ కన్వర్షన్, ఫైల్ సపోర్ట్, లైవ్ మైక్రోఫోన్, PDF, Word & Copy - 100% స్టేబుల్ వెర్షన్")
+st.caption("వాయిస్ కన్వర్షన్, HTML అనువాద పేజీ, PDF, Word & Copy - 100% పరిపూర్ణ వ్యవస్థ")
 
 # సెషన్ స్టేట్స్
 if "main_text" not in st.session_state:
@@ -32,7 +32,7 @@ if "last_mic_text" not in st.session_state:
 
 
 # ==========================================
-# 2. కోర్ హెల్పర్ ఫంక్షన్లు (Ultra-Reliable)
+# 2. కోర్ హెల్పర్ ఫంక్షన్లు
 # ==========================================
 
 async def generate_voice_file(text, voice, pitch_val, rate_val, output_filename):
@@ -76,6 +76,38 @@ def create_docx_bytes(text):
     doc.save(output)
     output.seek(0)
     return output.getvalue()
+
+
+# 📄 ప్యూర్ ప్రింటబుల్ PDF జనరేటర్ హెల్పర్
+def create_printable_pdf_html(text):
+    formatted_body = text.replace('\n', '<br>')
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="te">
+    <head>
+        <meta charset="utf-8">
+        <title>Spiritual Note</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                font-size: 16px;
+                line-height: 1.6;
+                padding: 30px;
+                color: #000;
+            }}
+            @media print {{
+                body {{ padding: 0; }}
+            }}
+        </style>
+    </head>
+    <body onload="window.print()">
+        <h2>🕉️ ఆధ్యాత్మిక నోట్</h2>
+        <hr>
+        <div>{formatted_body}</div>
+    </body>
+    </html>
+    """
+    return html_content
 
 
 # ==========================================
@@ -174,31 +206,51 @@ with st.expander("⚙️ ఆప్షనల్ ఆడియో సెట్ట�
 
 
 # ==========================================
-# 5. ఐదు ప్రధాన ఆప్షన్ల వరుస (Action Controls)
+# 5. ఆరు ప్రధాన ఆప్షన్ల వరుస (Action Controls)
 # ==========================================
 st.markdown("##### 🎯 యాక్షన్ కంట్రోల్స్ (Action Controls)")
 
 active_text = st.session_state.main_text.strip()
 
-col_btn1, col_btn2, col_btn3, col_btn4, col_btn5 = st.columns([0.22, 0.18, 0.18, 0.22, 0.20])
+# 6 బటన్లు అమర్చడం (HTML ట్రాన్స్‌లేట్ మరియు డెరెక్ట్ PDF)
+c1, c2, c3, c4, c5, c6 = st.columns([0.18, 0.18, 0.16, 0.16, 0.16, 0.16])
 
-with col_btn1:
+# 1. 🔊 ఆడియో బటన్
+with c1:
     convert_btn = st.button("🔊 ఆడియో చేయి", type="primary", use_container_width=True)
 
-with col_btn2:
+# 2. 🌐 HTML ట్రాన్స్‌లేట్ పేజీ (బ్రౌజర్‌లో ఆటో-ట్రాన్స్‌లేట్ కోసం)
+with c2:
     if active_text:
-        pdf_html = f"<html><head><meta charset='utf-8'></head><body><p style='font-size:16px;'>{active_text.replace('\n', '<br>')}</p></body></html>"
+        html_trans_page = f"<!DOCTYPE html><html><head><meta charset='utf-8'></head><body><p style='font-size:18px; line-height:1.6;'>{active_text.replace('\n', '<br>')}</p></body></html>"
+        st.download_button(
+            label="🌐 HTML (ట్రాన్స్‌లేట్)",
+            data=html_trans_page.encode('utf-8'),
+            file_name="translate_page.html",
+            mime="text/html",
+            use_container_width=True,
+            help="బ్రౌజర్‌లో ఓపెన్ చేసి సులభంగా అనువదించుకోవచ్చు"
+        )
+    else:
+        st.button("🌐 HTML (ట్రాన్స్‌లేట్)", disabled=True, use_container_width=True)
+
+# 3. 📄 ప్రింటబుల్ PDF
+with c3:
+    if active_text:
+        printable_pdf = create_printable_pdf_html(active_text)
         st.download_button(
             label="📄 PDF ఫైల్",
-            data=pdf_html.encode('utf-8'),
+            data=printable_pdf.encode('utf-8'),
             file_name="spiritual_note.html",
             mime="text/html",
-            use_container_width=True
+            use_container_width=True,
+            help="డైరెక్ట్‌గా ప్రింట్ లేదా PDF గా సేవ్ అవుతుంది"
         )
     else:
         st.button("📄 PDF ఫైల్", disabled=True, use_container_width=True)
 
-with col_btn3:
+# 4. 📝 Word (.docx) బటన్
+with c4:
     if active_text:
         docx_data = create_docx_bytes(active_text)
         st.download_button(
@@ -211,16 +263,18 @@ with col_btn3:
     else:
         st.button("📝 Word ఫైల్", disabled=True, use_container_width=True)
 
-with col_btn4:
+# 5. 📋 కాపీ బటన్
+with c5:
     if active_text:
-        if st.button("📋 టెక్స్ట్ కాపీ", use_container_width=True):
+        if st.button("📋 కాపీ", use_container_width=True):
             st.code(active_text, language=None)
             st.toast("✅ పైన ఉన్న టెక్స్ట్‌ని క్లిక్ చేసి కాపీ చేసుకోండి!", icon="📋")
     else:
-        st.button("📋 టెక్స్ట్ కాపీ", disabled=True, use_container_width=True)
+        st.button("📋 కాపీ", disabled=True, use_container_width=True)
 
-with col_btn5:
-    if st.button("🧹 మొత్తం క్లియర్", use_container_width=True):
+# 6. 🧹 క్లియర్ బటన్
+with c6:
+    if st.button("🧹 క్లియర్", use_container_width=True):
         st.session_state.main_text = ""
         st.session_state.audio_bytes_data = None
         st.session_state.last_mic_text = ""
